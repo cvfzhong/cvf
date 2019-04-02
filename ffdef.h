@@ -1,6 +1,6 @@
 
 #pragma once
-
+//
 #define _PF_WIN32  1
 #define _PF_GCC  2
 
