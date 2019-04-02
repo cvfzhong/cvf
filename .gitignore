@@ -8,14 +8,12 @@
 *.vc.db
 *.idb
 *.filters
-/CVM/
-/libc/
-/IPK/
+
 
 # vs ignore
-*.vcxproj
-*.sln
-*.props
+#*.vcxproj
+#*.sln
+#*.props
 *.sdf
 *.opendb
 *.opensdf
