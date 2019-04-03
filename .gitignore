@@ -11,6 +11,9 @@ private.props
 *.vc.db
 *.idb
 *.filters
+*.lib
+*.exe
+*.dll
 
 
 # vs ignore
