@@ -48,7 +48,7 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v140</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -124,6 +124,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>F:\dev\libx-01\boost1;../;$(D_INCLUDE);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -139,12 +140,15 @@
     <ClCompile Include="argv.cpp" />
     <ClCompile Include="bfstream.cpp" />
     <ClCompile Include="err.cpp" />
+    <ClCompile Include="fio.cpp" />
     <ClCompile Include="mem_buf_large.cpp" />
     <ClCompile Include="mem_sys.cpp" />
+    <ClCompile Include="portable_linux.cpp" />
     <ClCompile Include="portable_win32.cpp" />
     <ClCompile Include="portable_wx.cpp" />
     <ClCompile Include="ssh.cpp" />
     <ClCompile Include="stdf.cpp" />
+    <ClCompile Include="thread.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="argv.h" />
@@ -156,6 +160,7 @@
     <ClInclude Include="def.h" />
     <ClInclude Include="diskmap.h" />
     <ClInclude Include="err.h" />
+    <ClInclude Include="fio.h" />
     <ClInclude Include="fwd.h" />
     <ClInclude Include="portable.h" />
     <ClInclude Include="src.cpp" />
@@ -164,6 +169,7 @@
     <ClInclude Include="mem.h" />
     <ClInclude Include="ssh.h" />
     <ClInclude Include="stdf.h" />
+    <ClInclude Include="thread.h" />
     <ClInclude Include="type.h" />
     <ClInclude Include="vector.h" />
   </ItemGroup>

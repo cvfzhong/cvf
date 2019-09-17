@@ -5,7 +5,7 @@
 #pragma warning(disable: 4819)
 
 #include"def.h"
-#include"opencv2/core.hpp"
+#include"opencv2/core/core.hpp"
 #include"opencv2/imgproc/imgproc_c.h"
 #include"opencv2/imgproc/imgproc.hpp"
 
@@ -263,12 +263,12 @@ inline Rect_<_ValT> rectOverlapped(const Rect_<_ValT> &rect0, const Rect_<_ValT>
 
 _CVX_API void   setPixels(void* pOut, const int width, const int height, const int step, const int pw, const void* pval, const int cps);
 
-inline void setPixels(Mat &m, const void *pval, const int psize=0)
+inline void setPixels(Mat m, const void *pval, const int psize=0)
 {
 	setPixels(DWHS(m), (int)m.elemSize(), pval, psize<=0? (int)m.elemSize():psize);
 }
 
-inline void setMem(Mat &m, char val)
+inline void setMem(Mat m, char val)
 {
 	memset_2d(m.data, (int)m.elemSize()*m.cols, m.rows, (int)m.step, val);
 }
@@ -278,7 +278,7 @@ inline void setMem(_ValT *data, size_t count, char val)
 	memset(data, val, sizeof(_ValT)*count);
 }
 
-inline void copyMem(const Mat &src, Mat &dest)
+inline void copyMem(const Mat &src, Mat dest)
 {
 	assert(src.elemSize()*src.cols == dest.elemSize()*dest.cols && src.rows == dest.rows);
 
@@ -402,7 +402,7 @@ inline bool  resampleNN(const Mat_<Vec<_ValT, cn> > &img, Vec<_ResultValT, cn> &
 	int	ix = int(x + 0.5), iy = int(y + 0.5);
 	if (unsigned(ix) < unsigned(img.cols) && unsigned(iy) < unsigned(img.rows))
 	{
-		const Vec<_ValT, cn> &p = *img.ptr<Vec<_ValT, cn> >(iy, ix);
+		const Vec<_ValT, cn> &p = *img.template ptr<Vec<_ValT, cn>>(iy, ix);
 		for (int i = 0; i < cn; ++i)
 			val[i] = ff::NumCast<_ResultValT>(p[i]);
 		ok = true;
@@ -424,7 +424,7 @@ inline bool  resampleBL(const Mat_<Vec<_ValT, cn> > &img, Vec<_ResultValT,cn> &v
 	if (unsigned(ix)<unsigned(img.cols - 1) && unsigned(iy)<unsigned(img.rows - 1))
 	{
 		double rx = x - ix, ry = y - iy;
-		const Vec<_ValT, cn> *p = img.ptr<Vec<_ValT, cn> >(iy, ix);
+		const Vec<_ValT, cn> *p = img.template ptr<Vec<_ValT, cn> >(iy, ix);
 		const Vec<_ValT, cn> *q = (Vec<_ValT, cn>*)(reinterpret_cast<const char*>(p) + img.step);
 
 		
@@ -440,7 +440,7 @@ inline bool  resampleBL(const Mat_<Vec<_ValT, cn> > &img, Vec<_ResultValT,cn> &v
 		ix = int(x + 0.5), iy = int(y + 0.5);
 		if (unsigned(ix) < unsigned(img.cols) && unsigned(iy) < unsigned(img.rows))
 		{
-			const Vec<_ValT, cn> &p = *img.ptr<Vec<_ValT, cn> >(iy, ix);
+			const Vec<_ValT, cn> &p = *img.template ptr<Vec<_ValT, cn> >(iy, ix);
 			for (int i = 0; i < cn; ++i)
 				val[i] = ff::NumCast<_ResultValT>(p[i]);
 		}
@@ -461,7 +461,7 @@ template<typename _ValT, int cn, typename _AlphaValT>
 inline Mat_<Vec<_ValT, cn> > alphaBlend(const Mat_<Vec<_ValT, cn> > &F, const Mat_<_AlphaValT> &alpha, double alphaScale, const _ValT B[])
 {
 	Mat_<Vec<_ValT, cn> > C(F.size());
-	for_each_3(DWHNC(F), DN1(alpha), DNC(C), [B,alphaScale](const _ValT *f, uchar a, _ValT *c){
+	for_each_3(DWHNC(F), DN1(alpha), DNC(C), [B,alphaScale](const _ValT *f, _AlphaValT a, _ValT *c){
 		double w = a * alphaScale;
 		for (int i = 0; i < cn; ++i)
 			c[i] = _ValT(B[i] + w*(f[i] - B[i]));
@@ -474,7 +474,7 @@ template<typename _ValT, int cn, typename _AlphaValT>
 inline Mat_<Vec<_ValT, cn> > alphaBlend(const Mat_<Vec<_ValT, cn> > &F, const Mat_<_AlphaValT> &alpha, double alphaScale, const Mat_<Vec<_ValT, cn> > &B)
 {
 	Mat_<Vec<_ValT, cn> > C(F.size());
-	for_each_4(DWHNC(F), DN1(alpha), DNC(B), DNC(C),  [alphaScale](const _ValT *f, uchar a, const _ValT *b, _ValT *c){
+	for_each_4(DWHNC(F), DN1(alpha), DNC(B), DNC(C),  [alphaScale](const _ValT *f, _AlphaValT a, const _ValT *b, _ValT *c){
 		double w = a * alphaScale;
 		for (int i = 0; i < cn; ++i)
 			c[i] = _ValT(b[i] + w*(f[i] - b[i]));

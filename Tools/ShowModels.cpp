@@ -1,5 +1,6 @@
 
 #include"EDK/cmds.h"
+#include"BFC/stdf.h"
 
 _CMDI_BEG
 
@@ -8,6 +9,23 @@ class ShowModels
 {  
 public: 
 	virtual void exec(std::string dataDir, std::string args)
+	{
+		std::string file = R"(F:\dev\prj-c1\1100-Re3DX\TestRe3DX\3ds\plane.3ds)";
+
+		//std::string file = R"(F:\SDUicloudCache\re3d\3ds-model\plane\plane.3ds)";
+		
+		CVRModel model(file);
+		Matx44f m = model.calcStdPose();
+		m = m*cvrm::rotate(CV_PI, Vec3f(1, 0, 0));
+
+		//model.setTransformation(m);
+
+		//model.saveAs(file);
+
+		mdshow("model", model);
+		cv::cvxWaitKey();
+	}
+	virtual void exec1(std::string dataDir, std::string args)
 	{
 		printf("Please drag-and-drop 3D model files to the main window.\n");
 
@@ -19,7 +37,11 @@ public:
 				auto vfiles = (std::vector<std::string>*)data.ptr;
 				for (auto &file : *vfiles)
 				{
-					mdshow(file, CVRModel(file), Size(500, 500));
+					CVRModel model(file);
+
+					//model.saveAs(ff::ReplacePathElem(file, "obj", ff::RPE_FILE_EXTENTION));
+
+					mdshow(file, model, Size(500, 500));
 				}
 			}
 		},"showModels");

@@ -198,6 +198,20 @@ public:\
 
 CTC_IMP_DEFINED_TEST(IS_MEMCPY);
 
+template<typename _T>
+struct IsVoid
+{
+	static const bool Yes = false;
+};
+template<>
+struct IsVoid<void>
+{
+	static const bool Yes = true;
+};
+
+template<typename _T>
+inline void AllowCopyWithMemory(_T) {}
+
 //whether the type can be assigned by memory copy.
 template<typename _T>
 struct IsMemcpy
@@ -222,8 +236,9 @@ struct IsMemcpy
 	{
 		static const bool Yes=IsMemcpy<_ArrValT>::Yes;
 	};
+	static _T& makeT();
 public:
-	static const bool Yes=!IsClass<_T>::Yes||_is_mp<void,_T>::Yes||CTC_DEFINED(_T,IS_MEMCPY);
+	static const bool Yes=!IsClass<_T>::Yes||_is_mp<void,_T>::Yes||CTC_DEFINED(_T,IS_MEMCPY)||!IsVoid<decltype(AllowCopyWithMemory(makeT()))>::Yes;
 };
 
 

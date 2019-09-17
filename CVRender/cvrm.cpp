@@ -50,6 +50,22 @@ Matx44f cvrm::rotate(float angle, const cv::Vec3f &axis)
 	m=glm::rotate(m, angle, cvt<glm::vec3>(axis));
 	return cvtm(m);
 }
+Matx44f cvrm::rotate(const float r0[3], const float r1[3], const float r2[3])
+{
+	Matx44f m = cvrm::diag(1.0f);
+
+	float *v = m.val;
+	v[0] = r0[0]; v[1] = r1[0]; v[2] = r2[0];
+	v[4] = r0[1]; v[5] = r1[1]; v[6] = r2[1];
+	v[8] = r0[2]; v[9] = r1[2]; v[10] = r2[2];
+
+	return m;
+}
+Matx44f cvrm::ortho(float left, float right, float bottom, float top, float nearP, float farP)
+{
+	auto m = glm::ortho(left, right, bottom, top, nearP, farP);
+	return cvtm(m);
+}
 
 Matx44f cvrm::perspective(float f, Size windowSize, float nearP, float farP)
 {
@@ -90,7 +106,21 @@ Matx44f cvrm::perspective(float fx, float fy, float cx, float cy, Size windowSiz
 	return m;
 }
 
-Matx44f cvrm::fromK(const cv::Mat &K, Size windowSize, float nearP, float farP)
+Matx33f cvrm::defaultK(Size imageSize, float fscale)
+{
+	Matx33f K = Matx33f::eye();
+
+	float f=imageSize.height*fscale;
+
+	K(0, 0) = f;
+	K(1, 1) = f;
+	K(0, 2) = float(imageSize.width)/2.0f;
+	K(1, 2) = float(imageSize.height)/2.0f;
+
+	return K;
+}
+
+Matx44f cvrm::fromK(const Matx33f &K, Size windowSize, float nearP, float farP)
 {
 	cv::Mat1f Kf(K);
 	return perspective(Kf(0, 0), Kf(1, 1), Kf(0, 2), Kf(1, 2), windowSize, nearP, farP);
@@ -102,51 +132,65 @@ Matx44f cvrm::lookat(float eyex, float eyey, float eyez, float centerx, float ce
 	return cvtm(m);
 }
 
-static void extrinsicMatrix2ModelViewMatrix(cv::Mat rotation, cv::Mat translation, double* model_view_matrix)
+static void extrinsicMatrix2ModelViewMatrix(cv::Matx33f rotation, cv::Vec3f translation, float* model_view_matrix)
 {
 	//绕X轴旋转180度，从OpenCV坐标系变换为OpenGL坐标系
-	static double d[] =
+	static float d[] =
 	{
 		1,  0,  0,
 		0, -1,  0,
 		0,  0, -1
 	};
-	cv::Mat_<double> rx(3, 3, d);
+	cv::Matx33f rx(d);
 
 	rotation = rx*rotation;
 	translation = rx*translation;
 
 	//opengl默认的矩阵为列主序
-	model_view_matrix[0] = rotation.at<double>(0, 0);
-	model_view_matrix[1] = rotation.at<double>(1, 0);
-	model_view_matrix[2] = rotation.at<double>(2, 0);
+	model_view_matrix[0] = rotation(0, 0);
+	model_view_matrix[1] = rotation(1, 0);
+	model_view_matrix[2] = rotation(2, 0);
 	model_view_matrix[3] = 0.0f;
 
-	model_view_matrix[4] = rotation.at<double>(0, 1);
-	model_view_matrix[5] = rotation.at<double>(1, 1);
-	model_view_matrix[6] = rotation.at<double>(2, 1);
+	model_view_matrix[4] = rotation(0, 1);
+	model_view_matrix[5] = rotation(1, 1);
+	model_view_matrix[6] = rotation(2, 1);
 	model_view_matrix[7] = 0.0f;
 
-	model_view_matrix[8] = rotation.at<double>(0, 2);
-	model_view_matrix[9] = rotation.at<double>(1, 2);
-	model_view_matrix[10] = rotation.at<double>(2, 2);
+	model_view_matrix[8] = rotation(0, 2);
+	model_view_matrix[9] = rotation(1, 2);
+	model_view_matrix[10] = rotation(2, 2);
 	model_view_matrix[11] = 0.0f;
 
-	model_view_matrix[12] = translation.at<double>(0, 0);
-	model_view_matrix[13] = translation.at<double>(1, 0);
-	model_view_matrix[14] = translation.at<double>(2, 0);
+	model_view_matrix[12] = translation(0);
+	model_view_matrix[13] = translation(1);
+	model_view_matrix[14] = translation(2);
 	model_view_matrix[15] = 1.0f;
 }
-Matx44f cvrm::fromRT(const cv::Mat &rvec, const cv::Mat &tvec)
+Matx44f cvrm::fromRT(const Vec3f &rvec, const Vec3f &tvec)
 {
-	cv::Mat R;
+	if (isinf(tvec[0]) || isnan(tvec[0]) || isinf(rvec[0]) || isnan(rvec[0]))
+		return I();
+
+	cv::Matx33f R;
 	cv::Rodrigues(rvec, R);
 
-	cv::Matx44d m;
+	cv::Matx44f m;
 	extrinsicMatrix2ModelViewMatrix(R, tvec, m.val);
-	return Matx44f(m);
+	return m;
 }
 
+void cvrm::decomposeRT(const Matx44f &m, Vec3f &rvec, Vec3f &tvec)
+{
+	const float *v = m.val;
+	tvec[0] =  v[12];
+	tvec[1] = -v[13];
+	tvec[2] = -v[14];
+
+	cv::Matx33f R(v[0],v[4],v[8],-v[1],-v[5],-v[9],-v[2],-v[6],-v[10]);
+
+	cv::Rodrigues(R, rvec);
+}
 
 #if 0
 static cv::Mat flipExtrinsicYZ(const cv::Mat &m_extrinsic)
@@ -310,6 +354,8 @@ public:
 	glm::mat4 MV, Tr;
 	int oldX = 0, oldY = 0;
 	float r_angle = 0, dist = 0;
+
+	float viewU = 0, viewV = 0;
 public:
 	glm::vec2 scaleMouse(glm::vec2 coords, glm::vec2 viewport) {
 		return glm::vec2(static_cast<float>(coords.x*2.f) / static_cast<float>(viewport.x) - 1.f,
@@ -382,6 +428,31 @@ public:
 	{
 		dist += (val > 0 ? 0.25f : -0.25f);
 	}
+	void OnKeyDown(int key, int flags)
+	{
+		const float delta = 0.1f;
+		switch (key)
+		{
+		case '4': //left
+			viewU -= delta;
+			break;
+		case '6'://right
+			viewU += delta;
+			break;
+		case '8'://up
+			viewV += delta;
+			break;
+		case '2'://down
+			viewV -= delta;
+			break;
+		}
+	}
+	Matx44f getViewRotate()
+	{
+		float sinv = sin(viewV);
+		Vec3f dir(cos(viewU)*sinv, sin(viewU)*sinv, cos(viewV));
+		return cvrm::rotate(Vec3f(0, 0, 1), dir);
+	}
 };
 
 CVRTrackBall::CVRTrackBall()
@@ -402,12 +473,16 @@ void CVRTrackBall::onMouseWheel(int x, int y, int val)
 {
 	impl->OnMouseWheel(x, y, val);
 }
+void CVRTrackBall::onKeyDown(int key, int flags)
+{
+	impl->OnKeyDown(key, flags);
+}
 void CVRTrackBall::apply(Matx44f &mModel, Matx44f &mView, bool update)
 {
 	if (!update)
 	{
 		memcpy(mModel.val, &impl->R[0][0], sizeof(float) * 16);
-		mView = cvrm::translate(0, 0, impl->dist);
+		mView = impl->getViewRotate()*cvrm::translate(0, 0, impl->dist);
 	}
 	else
 	{
@@ -415,6 +490,6 @@ void CVRTrackBall::apply(Matx44f &mModel, Matx44f &mView, bool update)
 		memcpy(T.val, &impl->R[0][0], sizeof(float) * 16);
 		mModel = mModel*T;
 
-		mView = mView*cvrm::translate(0, 0, impl->dist);
+		mView = mView*impl->getViewRotate()*cvrm::translate(0, 0, impl->dist);
 	}
 }

@@ -62,7 +62,7 @@ void BFileStreamBuffer::Resize(long size)
 	if(_fp)
 	{
 		this->Flush();
-#ifdef __APPLE__
+#ifndef _WIN32
         int fd=fileno(_fp);
         if(ftruncate(fd,size)!=0)
             FF_EXCEPTION(ERR_FILE_OP_FAILED,"");

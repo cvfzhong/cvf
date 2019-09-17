@@ -6,7 +6,8 @@
 #ifdef _WIN32
 #include"bfc/portable_win32.cpp"
 #else
-#include"BFC/portable_wx.cpp"
+//#include"BFC/portable_wx.cpp"
+#include"BFC/portable_linux.cpp"
 #endif
 
 //base

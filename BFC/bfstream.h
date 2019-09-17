@@ -14,6 +14,7 @@
 
 _FF_BEG
 
+typedef uint32 bfs_size_t;
 
 class _BFC_API BStreamBase
 {
@@ -275,7 +276,7 @@ public:
 
 	void ReadBlock(BMemoryStreamBuffer &buf)
 	{
-		this->_read_block(buf,this->Read<long>());
+		this->_read_block(buf,this->Read<bfs_size_t>());
 	}
 	void Load(BMemoryStreamBuffer &buf)
 	{
@@ -314,7 +315,7 @@ protected:
 	void _read_block(BMemoryStreamBuffer &buf, long size);
 };
 
-typedef uint32 bfs_size_t;
+
 
 
 template<typename _IBST,typename _ValT>
@@ -493,7 +494,7 @@ public:
 	void WriteBlock(const BMemoryStreamBuffer &buf)
 	{
 		long size=buf.Size();
-		(*this)<<size;
+		(*this)<<(bfs_size_t)size;
 		this->Dump(buf);
 	}
 	void Dump(const BMemoryStreamBuffer &buf)
@@ -703,15 +704,7 @@ size_t _BFC_API BFSCopy(IBFStream &ibs, BFStream::PosType ibeg,
 	);
 //#endif
 
-//#define FVT_DEFINE_BFS_IO(class_name,in_seq,out_seq) \
-//		friend void BSRead(fvt::IBFStream &ibs,class_name &v) \
-//		{ \
-//			ibs>>in_seq; \
-//		} \
-//		friend void BSWrite(fvt::OBFStream &obs,const class_name &v) \
-//		{ \
-//			obs<<out_seq; \
-//		} 
+
 
 #define BFSRead  BSRead
 #define BFSWrite BSWrite

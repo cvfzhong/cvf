@@ -11,17 +11,20 @@
 
 #ifdef _MSC_VER
 #include<Windows.h>
+
+typedef  LRESULT(CALLBACK *WndProcT)(
+	_In_ HWND   hwnd,
+	_In_ UINT   uMsg,
+	_In_ WPARAM wParam,
+	_In_ LPARAM lParam
+	);
+
 #endif
 
 #define _CMD_DIR_NAME _TX("__cvxcmd\\")
 #define _WND_LEADING_CHAR '.'
 
-typedef  LRESULT  (CALLBACK *WndProcT)(
-	_In_ HWND   hwnd,
-	_In_ UINT   uMsg,
-	_In_ WPARAM wParam,
-	_In_ LPARAM lParam
-);
+
 
 
 #if 0 //def _MSC_VER
@@ -364,6 +367,32 @@ CVWindow::~CVWindow() throw()
 CVTrackbar::~CVTrackbar() throw()
 {}
 
+#ifdef _WIN32
+
+struct _CVXWindowData
+{
+	void *handle;
+	CVWindow *cvw;
+};
+
+template<typename _DataT>
+typename std::list<_DataT>::iterator _findWnd(void *handle, std::list<_DataT> &wndList, bool create = false)
+{
+	auto itr = wndList.begin();
+	for (; itr != wndList.end(); ++itr)
+		if (handle == itr->handle)
+			break;
+	if (create && itr == wndList.end())
+	{
+		wndList.push_back(_DataT());
+		--itr;
+		itr->handle = handle;
+	}
+	return itr;
+}
+
+static std::list<_CVXWindowData> g_wndData;
+
 int dragQueryFiles(HDROP hdrop, std::vector<std::string> &vfiles)
 {
 	CHAR buf[MAX_PATH * 2];
@@ -381,29 +410,6 @@ int dragQueryFiles(HDROP hdrop, std::vector<std::string> &vfiles)
 	return count;
 }
 
-struct _CVXWindowData
-{
-	void *handle;
-	CVWindow *cvw;
-};
-
-template<typename _DataT>
-typename std::list<_DataT>::iterator _findWnd(void *handle, std::list<_DataT> &wndList, bool create = false)
-{
-	auto itr = wndList.begin();
-	for (; itr != wndList.end(); ++itr)
-		if (handle==itr->handle)
-			break;
-	if (create && itr == wndList.end())
-	{
-		wndList.push_back(_DataT());
-		--itr;
-		itr->handle=handle;
-	}
-	return itr;
-}
-
-static std::list<_CVXWindowData> g_wndData;
 static WndProcT  g_cvWndProc = NULL;
 
 LRESULT CALLBACK cvxWindowProc(
@@ -447,6 +453,7 @@ static void _setWindowProc(void *handle, CVWindow *cvw)
 	::SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(cvxWindowProc));
 	::DragAcceptFiles(hwnd, TRUE);
 }
+#endif
 
 
 
@@ -643,9 +650,10 @@ public:
 		{
 			cv::setKeyboardCallback(name, cvxKeyboardCallback, this);
 			cv::setMouseCallback(name, cvxMouseCallback, this);
-
+#ifdef _WIN32
 			void *handle = cvGetWindowHandle(name.c_str());
 			_setWindowProc(handle, this);
+#endif
 
 			bSetCallback = false;
 		}

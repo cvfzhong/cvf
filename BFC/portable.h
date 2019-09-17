@@ -42,6 +42,8 @@ _BFC_API void listSubDirectories(const string_t &path, std::vector<string_t> &di
 
 _BFC_API void removeDirectoryRecursively(const string_t &path);
 
+_BFC_API void connectNetDrive(const std::string &remotePath, const std::string &localName, const std::string &userName, const std::string &passWD);
+
 //============================================================================
 
 enum

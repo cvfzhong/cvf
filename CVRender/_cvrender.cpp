@@ -1,3 +1,5 @@
+//#include"GL/glew.h"
+//#include"GL/wglew.h"
 
 #include"_cvrender.h"
 
@@ -8,7 +10,7 @@
 #include<mutex>
 #include<thread>
 #include<chrono>
-
+#include<iostream>
 #if 0
 class _CVR_API CVRLock
 {
@@ -54,11 +56,23 @@ static void _callInitGLUT()
 
 static void displayCB()
 {
+	//glutSwapBuffers();
+	//std::cout << "render in:" << std::this_thread::get_id() << std::endl;
 }
+
+//static void onIdle()
+//{
+//	glutMainLoopEvent();
+//}
 
 void _initGL()
 {
 	glShadeModel(GL_SMOOTH);
+
+	//enable anti-alias
+	glEnable(GL_BLEND);
+	glEnable(GL_LINE_SMOOTH);
+	//glEnable(GL_POLYGON_SMOOTH);
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_TEXTURE_2D);
@@ -72,15 +86,17 @@ void _initGL()
 	glEnable(GL_COLOR_MATERIAL);
 }
 
+#ifdef _WIN32
+
 class _CVRDevice
 {
 public:
 	int _id = -1;
-	Size _size;
+	Size _size = Size(-1, -1);
 public:
 	~_CVRDevice()
 	{
-		release();
+		//release();
 	}
 	void release()
 	{
@@ -92,9 +108,9 @@ public:
 	}
 	void create(int width, int height, int flags, const std::string &name)
 	{
-		//CVR_LOCK();
-
 		_callInitGLUT();
+
+		//std::cout <<"init. GLUT in:" << std::this_thread::get_id() << std::endl;
 
 		this->release();
 		glutInitDisplayMode(flags&CVRW_GLUT_MASK);
@@ -109,7 +125,9 @@ public:
 		}
 
 		glutDisplayFunc(displayCB);
+		//glutIdleFunc(onIdle);
 		glutMainLoopEvent();
+
 		_initGL();
 	}
 
@@ -135,7 +153,175 @@ public:
 			_size = newSize;
 		}
 	}
+	void postRedisplay()
+	{
+		//glutPostWindowRedisplay(_id);
+		//glutPostRedisplay();
+		//glutMainLoopEvent();
+	}
 };
+
+#else
+
+#include <X11/X.h>
+#include <X11/Xlib.h>
+#include <GL/gl.h>
+#include <GL/glx.h>
+
+typedef GLXContext(*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+typedef Bool(*glXMakeContextCurrentARBProc)(Display*, GLXDrawable, GLXDrawable, GLXContext);
+static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+static glXMakeContextCurrentARBProc glXMakeContextCurrentARB = 0;
+
+int testX11() {
+	static int visual_attribs[] = {
+		None
+	};
+	int context_attribs[] = {
+		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+		None
+	};
+
+	Display* dpy = XOpenDisplay(0);
+	int fbcount = 0;
+	GLXFBConfig* fbc = NULL;
+	GLXContext ctx;
+	GLXPbuffer pbuf;
+
+	/* open display */
+	if (!(dpy = XOpenDisplay(0))) {
+		fprintf(stderr, "Failed to open display\n");
+		exit(1);
+	}
+
+	/* get framebuffer configs, any is usable (might want to add proper attribs) */
+	if (!(fbc = glXChooseFBConfig(dpy, DefaultScreen(dpy), visual_attribs, &fbcount))) {
+		fprintf(stderr, "Failed to get FBConfig\n");
+		exit(1);
+	}
+
+	/* get the required extensions */
+	glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)glXGetProcAddressARB((const GLubyte *) "glXCreateContextAttribsARB");
+	glXMakeContextCurrentARB = (glXMakeContextCurrentARBProc)glXGetProcAddressARB((const GLubyte *) "glXMakeContextCurrent");
+	if (!(glXCreateContextAttribsARB && glXMakeContextCurrentARB)) {
+		fprintf(stderr, "missing support for GLX_ARB_create_context\n");
+		XFree(fbc);
+		exit(1);
+	}
+
+	/* create a context using glXCreateContextAttribsARB */
+	if (!(ctx = glXCreateContextAttribsARB(dpy, fbc[0], 0, True, context_attribs))) {
+		fprintf(stderr, "Failed to create opengl context\n");
+		XFree(fbc);
+		exit(1);
+	}
+
+	/* create temporary pbuffer */
+	int pbuffer_attribs[] = {
+		GLX_PBUFFER_WIDTH, 800,
+		GLX_PBUFFER_HEIGHT, 800,
+		None
+	};
+	pbuf = glXCreatePbuffer(dpy, fbc[0], pbuffer_attribs);
+
+	XFree(fbc);
+	XSync(dpy, False);
+
+	/* try to make it the current context */
+	//if (!glXMakeContextCurrent(dpy, pbuf, pbuf, ctx)) 
+	{
+		/* some drivers does not support context without default framebuffer, so fallback on
+		* using the default window.
+		*/
+		if (!glXMakeContextCurrent(dpy, DefaultRootWindow(dpy), DefaultRootWindow(dpy), ctx)) {
+			fprintf(stderr, "failed to make current\n");
+			exit(1);
+		}
+	}
+
+	/* try it out */
+	printf("vendor: %s\n", (const char*)glGetString(GL_VENDOR));
+
+	return 0;
+}
+
+int createGLContext() {
+	Display *dpy;
+	Window root;
+	GLint attr[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
+	XVisualInfo *vi;
+	GLXContext glc;
+
+	/* open display */
+	if (!(dpy = XOpenDisplay(NULL))) {
+		fprintf(stderr, "cannot connect to X server\n\n");
+		exit(1);
+	}
+
+	/* get root window */
+	root = DefaultRootWindow(dpy);
+
+	/* get visual matching attr */
+	if (!(vi = glXChooseVisual(dpy, 0, attr))) {
+		fprintf(stderr, "no appropriate visual found\n\n");
+		exit(1);
+	}
+
+	/* create a context using the root window */
+	if (!(glc = glXCreateContext(dpy, vi, NULL, GL_TRUE))) {
+		fprintf(stderr, "failed to create context\n\n");
+		exit(1);
+	}
+	glXMakeCurrent(dpy, root, glc);
+
+	/* try it out, remember to *NOT* render to the default framebuffer! */
+	//printf("vendor: %s\n", (const char*)glGetString(GL_VENDOR));
+
+	return 0;
+}
+
+class _CVRDevice
+{
+public:
+	Size _size=Size(-1,-1);
+public:
+	~_CVRDevice()
+	{
+		//release();
+	}
+	void release()
+	{
+	}
+	void create(int width, int height, int flags, const std::string &name)
+	{
+		//CVR_LOCK();
+		createGLContext();
+		_initGL();
+		_size=Size(0,0);
+		this->setSize(width,height);
+	}
+
+	void setCurrent()
+	{
+		
+	}
+	void setSize(int width, int height)
+	{
+		Size newSize(width, height);
+		if (newSize != _size)
+		{
+			glViewport(0, 0, width, height);
+			_size = newSize;
+		}
+	}
+	void postRedisplay()
+	{
+	}
+};
+
+#endif
+
 
 CVRDevice::CVRDevice()
 	:_impl(new _CVRDevice)
@@ -161,7 +347,7 @@ Size CVRDevice::size() const
 }
 bool CVRDevice::empty() const
 {
-	return _impl->_id < 0;
+	return _impl->_size.width <= 0;
 }
 void CVRDevice::setCurrent()
 {
@@ -172,7 +358,10 @@ void CVRDevice::setSize(int width, int height)
 {
 	_impl->setSize(width, height);
 }
-
+void CVRDevice::postRedisplay()
+{
+	_impl->postRedisplay();
+}
 
 static std::thread::id  g_glThreadID;
 static std::list<GLEvent*>  g_glEvents;
@@ -251,51 +440,91 @@ void cvrPostEvent(GLEvent *evt, bool wait)
 
 //=================================================================
 
-/* ---------------------------------------------------------------------------- */
-void get_bounding_box_for_node(const aiScene *scene, const  aiNode* nd,
-	aiVector3D* min,
-	aiVector3D* max,
-	aiMatrix4x4* trafo
-) {
-	aiMatrix4x4 prev;
-	unsigned int n = 0, t;
+template<typename _OpT>
+void _forNodeVetices(const aiScene *sc, const struct aiNode* nd, aiMatrix4x4 &prevT, _OpT &op)
+{
+	aiMatrix4x4 T = prevT; 
+	aiMultiplyMatrix4(&T, &nd->mTransformation);
 
-	prev = *trafo;
-	aiMultiplyMatrix4(trafo, &nd->mTransformation);
+	for (uint n = 0; n < nd->mNumMeshes; ++n)
+	{
+		const aiMesh* mesh = sc->mMeshes[nd->mMeshes[n]];
 
-	for (; n < nd->mNumMeshes; ++n) {
-		const  aiMesh* mesh = scene->mMeshes[nd->mMeshes[n]];
-		for (t = 0; t < mesh->mNumVertices; ++t) {
+		std::unique_ptr<char[]> _vmask(new char[mesh->mNumVertices]);
+		char *vmask = _vmask.get();
+		memset(vmask, 0, mesh->mNumVertices);
 
-			aiVector3D tmp = mesh->mVertices[t];
-			aiTransformVecByMatrix4(&tmp, trafo);
-
-			min->x = __min(min->x, tmp.x);
-			min->y = __min(min->y, tmp.y);
-			min->z = __min(min->z, tmp.z);
-
-			max->x = __max(max->x, tmp.x);
-			max->y = __max(max->y, tmp.y);
-			max->z = __max(max->z, tmp.z);
+		for (uint t = 0; t < mesh->mNumFaces; ++t)
+		{
+			const struct aiFace* face = &mesh->mFaces[t];
+			for (uint i = 0; i < face->mNumIndices; i++)		// go through all vertices in face
+			{
+				vmask[face->mIndices[i]] = 1;
+			}
+		}
+		for (uint i = 0; i < mesh->mNumVertices; ++i)
+		{
+			if (vmask[i] != 0)
+			{
+				aiVector3D v = mesh->mVertices[i];
+				aiTransformVecByMatrix4(&v, &T);
+				op(v);
+			}
 		}
 	}
 
-	for (n = 0; n < nd->mNumChildren; ++n) {
-		get_bounding_box_for_node(scene, nd->mChildren[n], min, max, trafo);
+	for (uint n = 0; n < nd->mNumChildren; ++n)
+	{
+		_forNodeVetices(sc, nd->mChildren[n], T, op);
 	}
-	*trafo = prev;
+}
+
+template<typename _OpT>
+void _forAllVetices(const aiScene *sc, _OpT &op)
+{
+	aiMatrix4x4 T;
+	aiIdentityMatrix4(&T);
+	_forNodeVetices(sc, sc->mRootNode, T, op);
 }
 
 /* ---------------------------------------------------------------------------- */
-void get_bounding_box(const aiScene *scene, aiVector3D* min, aiVector3D* max)
-{
-	aiMatrix4x4 trafo;
-	aiIdentityMatrix4(&trafo);
+//
+//void get_bounding_box_for_node(const aiScene *scene, const  aiNode* nd,
+//	aiVector3D* min,
+//	aiVector3D* max,
+//	aiMatrix4x4* trafo
+//) {
+//	aiMatrix4x4 prev;
+//	unsigned int n = 0, t;
+//
+//	prev = *trafo;
+//	aiMultiplyMatrix4(trafo, &nd->mTransformation);
+//
+//	for (; n < nd->mNumMeshes; ++n) {
+//		const  aiMesh* mesh = scene->mMeshes[nd->mMeshes[n]];
+//		for (t = 0; t < mesh->mNumVertices; ++t) {
+//
+//			aiVector3D tmp = mesh->mVertices[t];
+//			aiTransformVecByMatrix4(&tmp, trafo);
+//
+//			min->x = __min(min->x, tmp.x);
+//			min->y = __min(min->y, tmp.y);
+//			min->z = __min(min->z, tmp.z);
+//
+//			max->x = __max(max->x, tmp.x);
+//			max->y = __max(max->y, tmp.y);
+//			max->z = __max(max->z, tmp.z);
+//		}
+//	}
+//
+//	for (n = 0; n < nd->mNumChildren; ++n) {
+//		get_bounding_box_for_node(scene, nd->mChildren[n], min, max, trafo);
+//	}
+//	*trafo = prev;
+//}
 
-	min->x = min->y = min->z = 1e10f;
-	max->x = max->y = max->z = -1e10f;
-	get_bounding_box_for_node(scene, scene->mRootNode, min, max, &trafo);
-}
+/* ---------------------------------------------------------------------------- */
+
 
 void makeSizePower2(Mat &img)
 {
@@ -384,12 +613,39 @@ void _CVRModel::load(const std::string &file, int postProLevel)
 	scene = newScene;
 	sceneFile = file;
 
+	this->_updateSceneInfo();
+
+	loadTextureImages(scene, ff::GetDirectory(file), vTex);
+}
+
+void get_bounding_box(const aiScene *scene, aiVector3D* min, aiVector3D* max)
+{
+	min->x = min->y = min->z = 1e10f;
+	max->x = max->y = max->z = -1e10f;
+
+	/*double c[3] = { 0,0,0 };
+	int n = 0;*/
+
+	_forAllVetices(scene, [min, max/*, &c, &n*/](aiVector3D &tmp) {
+		min->x = __min(min->x, tmp.x);
+		min->y = __min(min->y, tmp.y);
+		min->z = __min(min->z, tmp.z);
+
+		max->x = __max(max->x, tmp.x);
+		max->y = __max(max->y, tmp.y);
+		max->z = __max(max->z, tmp.z);
+
+		//c[0] += tmp.x; c[1] += tmp.y; c[2] += tmp.z;
+		//++n;
+	});
+}
+
+void _CVRModel::_updateSceneInfo()
+{
 	get_bounding_box(scene, &scene_min, &scene_max);
 	scene_center.x = (scene_min.x + scene_max.x) / 2.0f;
 	scene_center.y = (scene_min.y + scene_max.y) / 2.0f;
 	scene_center.z = (scene_min.z + scene_max.z) / 2.0f;
-
-	loadTextureImages(scene, ff::GetDirectory(file), vTex);
 }
 
 //==================================================================================
@@ -552,7 +808,7 @@ static void loadGLTextures(const std::vector<TexImage> &vTexImages, TexMap &mTex
 
 void _CVRModel::_loadTextures()
 {
-	if (!vTex.empty() && _texMap.empty())
+	if (this->_texNotLoaded())
 	{
 		loadGLTextures(vTex, _texMap);
 
@@ -776,6 +1032,48 @@ void _CVRModel::render(int flags)
 #else
 	recursive_render(scene, _texMap, scene->mRootNode, flags);
 #endif
+}
+
+
+void _getAllVetices(const aiScene *sc, std::vector<Vec3f> &vtx)
+{
+	uint nMaxVertices = 0;
+	for (uint i = 0; i < sc->mNumMeshes; ++i)
+		nMaxVertices += sc->mMeshes[i]->mNumVertices;
+
+	vtx.clear();
+	vtx.reserve(nMaxVertices);
+
+	_forAllVetices(sc, [&vtx](aiVector3D &v) {
+		vtx.push_back(Vec3f(v.x, v.y, v.z));
+	});
+}
+
+Matx44f _CVRModel::calcStdPose()
+{
+	std::vector<Vec3f>  vtx;
+	_getAllVetices(scene, vtx);
+
+	Mat mvtx(vtx.size(), 3, CV_32FC1, &vtx[0]);
+	cv::PCA pca(mvtx, noArray(), PCA::DATA_AS_ROW);
+	
+	Vec3f mean = pca.mean;
+	Matx33f ev=pca.eigenvectors;
+
+	return cvrm::translate(-mean[0],-mean[1],-mean[2])*cvrm::rotate(&ev(1,0),&ev(0,0),&ev(2,0));
+}
+
+void _CVRModel::setSceneTransformation(const Matx44f &trans)
+{
+	aiMatrix4x4 m;
+	static_assert(sizeof(m) == sizeof(trans),"");
+	memcpy(&m, &trans, sizeof(m));
+	m.Transpose();
+
+	aiMultiplyMatrix4(&m, &scene->mRootNode->mTransformation);
+	scene->mRootNode->mTransformation = m;
+
+	this->_updateSceneInfo();
 }
 
 //==========================================================

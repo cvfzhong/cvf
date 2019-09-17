@@ -1,15 +1,37 @@
 #pragma once
 
+#ifdef CVRENDER_STATIC
+#define _CVR_API
+#endif
+
+#ifndef _CVR_API
+
+#if defined(_WIN32)
+
 #ifdef CVRENDER_EXPORTS
 #define _CVR_API __declspec(dllexport)
 #else
 #define _CVR_API __declspec(dllimport)
 #endif
 
+#elif defined(__GNUC__) && __GNUC__ >= 4
+
+#ifdef CVRENDER_EXPORTS
+#define _CVR_API __attribute__ ((visibility ("default")))
+#else
+#define _CVR_API 
+#endif
+
+#elif
+#define _CVR_API
+#endif
+#endif
+
 #include"opencv2/core/core.hpp"
 #include<memory>
 
 using cv::Matx44f;
+using cv::Matx33f;
 using cv::Size;
 
 class _CVR_API cvrm
@@ -28,15 +50,27 @@ public:
 
 	static Matx44f rotate(float angle, const cv::Vec3f &axis);
 
+	static Matx44f rotate(const float r0[3], const float r1[3], const float r2[3]);
+
+	static Matx44f ortho(float left, float right, float bottom, float top, float nearP, float farP);
+
 	static Matx44f perspective(float f, Size windowSize, float nearP, float farP);
 
 	//conver intrinsic parameters to projection matrix
 	static Matx44f perspective(float fx, float fy, float cx, float cy, Size windowSize, float nearP, float farP);
 
-	static Matx44f fromK(const cv::Mat &K, Size windowSize, float nearP, float farP);
+	//fscale = focal-length/image-height;
+	static Matx33f defaultK(Size imageSize, float fscale);
+
+	static Matx44f fromK(const Matx33f &K, Size windowSize, float nearP, float farP);
 
 	//convert rotation and translation vectors to model-view matrix
-	static Matx44f fromRT(const cv::Mat &rvec, const cv::Mat &tvec);
+	//Note: @rvec and @tvec are in OpenCV coordinates, returned 4x4 matrix is in OpenGL coordinates
+	static Matx44f fromRT(const cv::Vec3f &rvec, const cv::Vec3f &tvec);
+
+	//decompose a 3x4 (OpenGL) transformation matrix to (OpenCV) Rotation-Translation vectors
+	//the matrix @m should contain only rotation and translation
+	static void decomposeRT(const Matx44f &m, cv::Vec3f &rvec, cv::Vec3f &tvec);
 
 	static Matx44f lookat(float eyex, float eyey, float eyez, float centerx, float centery, float centerz, float upx, float upy, float upz);
 
@@ -55,12 +89,23 @@ _CVR_API cv::Vec3f operator*(const cv::Vec3f &x, const Matx44f &M);
 
 _CVR_API cv::Point3f operator*(const cv::Point3f &x, const Matx44f &M);
 
+class _CVR_API CVRRendable
+{
+public:
+	virtual void render(const Matx44f &sceneModelView, int flags) = 0;
+
+	virtual ~CVRRendable();
+};
+
 struct _CVRModel;
 
 class _CVR_API CVRModel
+	:public CVRRendable
 {
 	friend class _CVRender;
 	std::shared_ptr<_CVRModel> _model;
+public:
+	virtual void render(const Matx44f &sceneModelView, int flags);
 public:
 	CVRModel();
 	
@@ -92,11 +137,17 @@ public:
 	//get a transformation that transform the model to a standard position and size (centered at the origin and scale to fit in a unit cube)
 	Matx44f getUnitize() const;
 
+	cv::Vec3f getCenter() const;
+
 	void    getBoundingBox(cv::Vec3f &cMin, cv::Vec3f &cMax) const;
 
 	cv::Vec3f  getSizeBB() const ;
 
 	const std::string& getFile() const;
+
+	Matx44f calcStdPose() const;
+
+	void    setTransformation(const Matx44f &trans);
 };
 
 /* The matrixs related with OpenGL rendering, a 3D point X is transformed to an image point x by: x=X'*mModeli*mModel*mView*mProjection
@@ -111,12 +162,13 @@ public:
 public:
 	//initialize all matrix with mInit
 	CVRMats(const Matx44f &mInit=cvrm::I());
-	
+
 	//set mView and mProjection
-	CVRMats(Size viewSize, float fscale = 1.5f, float eyeDist = 2.0f, float zNear = 0.1, float zFar = 100);
+	//focalLength=fscale*viewHeight, fscale=sqrt(2)
+	CVRMats(Size viewSize, float fscale = 1.5f, float eyeDist = 4.0f, float zNear = 0.1, float zFar = 100);
 
 	//set the matrixs to show a model in a standard way (used in mdshow(...) )
-	CVRMats(const CVRModel &model, Size viewSize, float fscale = 1.5f, float eyeDist = 2.0f, float zNear = 0.1, float zFar = 100);
+	CVRMats(const CVRModel &model, Size viewSize, float fscale = 1.5f, float eyeDist = 4.0f, float zNear = 0.1, float zFar = 100);
 
 	Matx44f modelView() const
 	{
@@ -131,39 +183,11 @@ public:
 	cv::Mat1f  depth;
 	CVRMats    mats;
 public:
-	cv::Point3f unproject(float x, float y) const;
-
-	cv::Point3f unproject(const cv::Point2f &pt) const
-	{
-		return unproject(pt.x, pt.y);
-	}
-	void  unproject(const cv::Point2f vpt[], cv::Point3f dpt[], int count) const;
-
-	void unproject(const std::vector<cv::Point2f> &vpt, std::vector<cv::Point3f> &dpt) const
-	{
-		dpt.resize(vpt.size());
-		if (!vpt.empty())
-			unproject(&vpt[0], &dpt[0], (int)vpt.size());
-	}
-
-	cv::Point3f project(float x, float y, float z) const;
-
-	cv::Point3f project(const cv::Point3f &pt) const
-	{
-		return project(pt.x, pt.y, pt.z);
-	}
-	void  project(const cv::Point3f vpt[], cv::Point3f dpt[], int count) const;
-
-	void project(const std::vector<cv::Point3f> &vpt, std::vector<cv::Point3f> &dpt) const
-	{
-		dpt.resize(vpt.size());
-		if (!vpt.empty())
-			project(&vpt[0], &dpt[0], (int)vpt.size());
-	}
-
 	void getDepthRange(float &minDepth, float &maxDepth) const;
 
 	float getDepthRange() const;
+
+	cv::Mat1f getNormalizedDepth() const;
 
 	bool  getDepth(float x, float y, float &d) const;
 	
@@ -174,6 +198,91 @@ public:
 	}
 
 	static CVRResult blank(Size viewSize, const CVRMats &_mats);
+};
+
+class _CVR_API CVRProjector
+{
+	cv::Matx44f _mModelView;
+	cv::Matx44f _mProjection;
+	cv::Vec4i   _viewport;
+	cv::Mat1f   _depth;
+public:
+	CVRProjector();
+
+	CVRProjector(const CVRResult &rr);
+
+	CVRProjector(const CVRMats &mats, cv::Size viewSize);
+
+	CVRProjector(const cv::Matx44f &mModelView, const cv::Matx44f &mProjection, cv::Size viewSize);
+
+	//project 3D point to 2D
+	cv::Point3f project(float x, float y, float z) const
+	{
+		cv::Point3f p = cvrm::project(cv::Point3f(x, y, z), _mModelView, _mProjection, &_viewport[0]);
+		p.y = _viewport[3] - p.y;
+		return p;
+	}
+	cv::Point3f project(const cv::Point3f &pt) const
+	{
+		return project(pt.x, pt.y, pt.z);
+	}
+	void  project(const cv::Point3f vpt[], cv::Point3f dpt[], int count) const
+	{
+		for (int i = 0; i < count; ++i)
+			dpt[i] = project(vpt[i]);
+	}
+	void project(const std::vector<cv::Point3f> &vpt, std::vector<cv::Point3f> &dpt) const
+	{
+		dpt.resize(vpt.size());
+		if (!vpt.empty())
+			project(&vpt[0], &dpt[0], (int)vpt.size());
+	}
+	void  project(const cv::Point3f vpt[], cv::Point2f dpt[], int count) const
+	{
+		for (int i = 0; i < count; ++i)
+		{
+			cv::Point3f ptx= project(vpt[i]);
+			dpt[i] = cv::Point2f(ptx.x, ptx.y);
+		}
+	}
+	void project(const std::vector<cv::Point3f> &vpt, std::vector<cv::Point2f> &dpt) const
+	{
+		dpt.resize(vpt.size());
+		if (!vpt.empty())
+			project(&vpt[0], &dpt[0], (int)vpt.size());
+	}
+	void project(const std::vector<cv::Point3f> &vpt, std::vector<cv::Point> &dpt) const
+	{
+		dpt.resize(vpt.size());
+		for (size_t i = 0; i < vpt.size(); ++i)
+		{
+			cv::Point3f ptx = project(vpt[i]);
+			dpt[i] = cv::Point(int(ptx.x + 0.5), int(ptx.y + 0.5));
+		}
+	}
+	//unproject a 2D point (with depth) to 3D
+	cv::Point3f unproject(float x, float y, float depth) const
+	{
+		return cvrm::unproject(cv::Point3f(x, _viewport[3] - y, depth), _mModelView, _mProjection, &_viewport[0]);
+	}
+
+	cv::Point3f unproject(float x, float y) const;
+	
+	cv::Point3f unproject(const cv::Point2f &pt) const
+	{
+		return unproject(pt.x, pt.y);
+	}
+	void  unproject(const cv::Point2f vpt[], cv::Point3f dpt[], int count) const
+	{
+		for (int i = 0; i < count; ++i)
+			dpt[i] = unproject(vpt[i]);
+	}
+	void unproject(const std::vector<cv::Point2f> &vpt, std::vector<cv::Point3f> &dpt) const
+	{
+		dpt.resize(vpt.size());
+		if (!vpt.empty())
+			unproject(&vpt[0], &dpt[0], (int)vpt.size());
+	}
 };
 
 enum
@@ -198,6 +307,108 @@ enum
 	CVRM_DEPTH=0x02
 //	CVRM_ALPHA=0x04
 };
+
+template<typename _ValT>
+class CVRArray
+	:public CVRRendable
+{
+protected:
+	typedef std::vector<_ValT> _CtrT;
+
+	_CtrT  _v;
+public:
+	typedef _ValT value_type;
+	typedef typename _CtrT::iterator iterator;
+	typedef typename _CtrT::const_iterator const_iterator;
+public:
+	CVRArray()
+	{}
+	CVRArray(size_t size)
+		:_v(size)
+	{
+	}
+	void resize(size_t size)
+	{
+		_v.resize(size);
+	}
+	void push_back(const _ValT &val)
+	{
+		_v.push_back(val);
+	}
+	size_t size() const
+	{
+		return _v.size();
+	}
+	_ValT& operator[](int i)
+	{
+		return _v[i];
+	}
+	const _ValT& operator[](int i) const
+	{
+		return _v[i];
+	}
+	iterator begin()
+	{
+		return _v.begin();
+	}
+	const_iterator begin() const
+	{
+		return _v.begin();
+	}
+	iterator end()
+	{
+		return _v.end();
+	}
+	const_iterator end() const
+	{
+		return _v.end();
+	}
+};
+
+class _CVR_API CVRModelEx
+	:public CVRRendable
+{
+public:
+	CVRModel   model;
+	Matx44f    mModeli;
+	Matx44f    mModel;
+public:
+	CVRModelEx()
+		:mModeli(cvrm::I()),mModel(cvrm::I())
+	{}
+	CVRModelEx(const CVRModel &_model, const Matx44f &_mModeli = cvrm::I(), const Matx44f &_mModel = cvrm::I());
+
+	virtual void render(const Matx44f &sceneModelView, int flags);
+};
+
+class _CVR_API CVRModelArray
+	:public CVRArray<CVRModelEx>
+{
+public:
+	CVRModelArray()
+	{}
+	CVRModelArray(size_t size)
+		:CVRArray<CVRModelEx>(size)
+	{
+	}
+	virtual void render(const Matx44f &sceneModelView, int flags);
+};
+
+typedef std::shared_ptr<CVRRendable>  CVRRendablePtr;
+
+class _CVR_API CVRRendableArray
+	:public CVRArray<CVRRendablePtr>
+{
+public:
+	CVRRendableArray()
+	{}
+	CVRRendableArray(size_t size)
+		:CVRArray<CVRRendablePtr>(size)
+	{
+	}
+	virtual void render(const Matx44f &sceneModelView, int flags);
+};
+
 
 class _CVRender;
 
@@ -231,7 +442,9 @@ public:
 public:
 	CVRender();
 
-	CVRender(const CVRModel &model);
+	CVRender(CVRRendable &rendable);
+
+	CVRender(CVRRendablePtr rendablePtr);
 
 	~CVRender();
 
@@ -264,7 +477,7 @@ public:
 	//render with a temporary bg-image. The bg-image set by setBgImage will not be changed.
 	//CVRResult exec(CVRMats &mats, const cv::Mat &bgImg, int output = CVRM_IMAGE | CVRM_DEPTH, int flags = CVRM_DEFAULT);
 
-	const CVRModel& model() const;
+	//const CVRModel& model() const;
 };
 
 template<typename _DrawOpT>
@@ -291,6 +504,8 @@ public:
 	void onMouseMove(int x, int y, Size viewSize);
 
 	void onMouseWheel(int x, int y, int val);
+
+	void onKeyDown(int key, int flags);
 
 	/* get and apply the transformations
 	  rotation and scale are applied separately to model and view transformations
@@ -407,10 +622,13 @@ public:
 
 typedef std::shared_ptr<CVXShowModel> CVXShowModelPtr;
 
-inline CVXShowModelPtr mdshow(const std::string &wndName, const CVRModel &model, Size viewSize=Size(800,800), int renderFlags = CVRM_DEFAULT, const cv::Mat &bgImg=cv::Mat())
+ inline CVXShowModelPtr mdshow(const std::string &wndName, const CVRModel &model, Size viewSize=Size(800,800), int renderFlags = CVRM_DEFAULT, const cv::Mat bgImg=cv::Mat())
 {
-	cv::CVWindow *wnd = cv::getWindow(wndName, true);
 	CVXShowModelPtr dptr;
+	//return dptr;
+	
+	cv::CVWindow *wnd = cv::getWindow(wndName, true);
+	
 	if (wnd)
 	{
 		//realize the window

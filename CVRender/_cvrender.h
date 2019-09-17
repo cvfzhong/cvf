@@ -5,6 +5,7 @@
 #include "assimp/postprocess.h"
 #include"assimp/Exporter.hpp"
 
+#define FREEGLUT_STATIC
 #include"GL/freeglut.h"
 
 #include"opencv2/highgui.hpp"
@@ -41,10 +42,7 @@ using namespace cv;
 
 #define CVRW_VISIBLE    0x010000
 
-#define CVRW_DEFAULT (CVRW_RGBA|CVRW_DOUBLE|CVRW_DEPTH)
-
-
-
+#define CVRW_DEFAULT (CVRW_RGBA|CVRW_DOUBLE|CVRW_DEPTH/*|CVRW_VISIBLE*/)
 
 
 class _CVRDevice;
@@ -86,6 +84,7 @@ public:
 	{
 		this->setSize(size.width, size.height);
 	}
+	void postRedisplay();
 };
 
 
@@ -182,7 +181,7 @@ public:
 			sceneFile = "";
 		}
 		vTex.clear();
-		if (!_texMap.empty())
+		if (!_texMap.empty() || _sceneList!=0)
 		{
 			cvrCall([this](int) {
 				for (auto &t : _texMap)
@@ -190,26 +189,37 @@ public:
 					if (t.second.texID > 0)
 						glDeleteTextures(1, &t.second.texID);
 				}
+				_texMap.clear();
+
+				if (_sceneList != 0)
+				{
+					glDeleteLists(_sceneList, 1);
+					_sceneList = 0;
+					_sceneListRenderFlags = -1;
+				}
 			});
-			_texMap.clear();
-		}
-		if (_sceneList != 0)
-		{
-			glDeleteLists(_sceneList, 1);
-			_sceneList = 0;
-			_sceneListRenderFlags = -1;
+			cvrWaitFinish();
 		}
 	}
 
 	void saveAs(const std::string &file, std::string fmtID, const std::string & options);
 	
 	void load(const std::string &file, int postProLevel);
-	
 
-	void _loadTextures();
+	void _updateSceneInfo();
 	
+	void _loadTextures();
+
+	bool _texNotLoaded()
+	{
+		return !vTex.empty() && _texMap.empty();
+	}
 
 	void render(int flags);
+
+	Matx44f calcStdPose();
+
+	void  setSceneTransformation(const Matx44f &trans);
 
 	Matx44f getModeli()
 	{
@@ -217,10 +227,15 @@ public:
 			return cvrm::I();
 		else
 		{
+#if 1
 			float tmp = scene_max.x - scene_min.x;
 			tmp = __max(scene_max.y - scene_min.y, tmp);
 			tmp = __max(scene_max.z - scene_min.z, tmp);
-			tmp = 1.f / tmp;
+			tmp = 2.f / tmp;
+#else
+			auto vsize = scene_max - scene_min;
+			float tmp=2.0/vsize.Length();
+#endif
 
 			return cvrm::translate(-scene_center.x, -scene_center.y, -scene_center.z) * cvrm::scale(tmp, tmp, tmp);
 		}

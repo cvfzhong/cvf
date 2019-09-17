@@ -6,7 +6,11 @@
 #include <Shellapi.h>
 #include <Shlobj.h>
 
+#include <WinNetWk.h>
+#pragma comment(lib, "Mpr.lib")
+
 #include"BFC/stdf.h"
+#include"BFC/err.h"
 
 _FF_BEG
 
@@ -357,6 +361,26 @@ _BFC_API void removeDirectoryRecursively(const string_t &path)
 	ForEachFile(path, &op, true, true);
 }
 
+_BFC_API void connectNetDrive(const std::string &remotePath, const std::string &localName, const std::string &userName, const std::string &passWD)
+{
+	WNetCancelConnection2A(localName.c_str(), CONNECT_UPDATE_PROFILE, true);
+
+	//string szPasswd = "fan123", szUserName = "fan"; //用户名和密码
+	NETRESOURCEA net_Resource;
+	memset(&net_Resource, 0, sizeof(net_Resource));
+	net_Resource.dwDisplayType = RESOURCEDISPLAYTYPE_DIRECTORY;
+	net_Resource.dwScope = RESOURCE_CONNECTED;
+	net_Resource.dwType = RESOURCETYPE_ANY;
+	net_Resource.dwUsage = 0;
+	net_Resource.lpComment = "";
+	net_Resource.lpLocalName = (LPSTR)localName.c_str();  //映射成本地驱动器Z:
+	net_Resource.lpProvider = NULL;
+	net_Resource.lpRemoteName = (LPSTR)remotePath.c_str(); // \\servername\共享资源名
+	DWORD dwFlags = CONNECT_UPDATE_PROFILE;
+	DWORD dw = WNetAddConnection2A(&net_Resource, passWD.c_str(), userName.c_str(), dwFlags);
+	if (dw != ERROR_SUCCESS)
+		FF_EXCEPTION(ERR_WINAPI_FAILED,"");
+}
 
 _BFC_API std::string& WCS2MBS(const wchar_t *wcs, std::string &mbs, int code_page)
 {

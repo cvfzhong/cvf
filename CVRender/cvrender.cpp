@@ -1,7 +1,24 @@
 
 #include"_cvrender.h"
+#include<iostream>
+#include<thread>
 
+CVRRendable::~CVRRendable()
+{}
 
+void CVRModel::render(const Matx44f &sceneModelView, int flags)
+{
+	if (_model)
+	{
+		if (_model->_texNotLoaded())
+			_model->_loadTextures();
+
+		glMatrixMode(GL_MODELVIEW);
+		glLoadMatrixf(sceneModelView.val);
+
+		_model->render(flags);
+	}
+}
 
 CVRModel::CVRModel()
 	:_model(new _CVRModel)
@@ -40,6 +57,13 @@ Matx44f CVRModel::getUnitize() const
 {
 	return _model->getModeli();
 }
+
+cv::Vec3f CVRModel::getCenter() const
+{
+	auto &c = _model->scene_center;
+	return cv::Vec3f(c.x, c.y, c.z);
+}
+
 void    CVRModel::getBoundingBox(cv::Vec3f &cMin, cv::Vec3f &cMax) const
 {
 	static_assert(sizeof(cMin) == sizeof(_model->scene_min),"incompatible type for memcpy");
@@ -55,6 +79,14 @@ cv::Vec3f CVRModel::getSizeBB() const
 const std::string& CVRModel::getFile() const
 {
 	return _model->sceneFile;
+}
+Matx44f CVRModel::calcStdPose() const
+{
+	return _model->calcStdPose();
+}
+void CVRModel::setTransformation(const Matx44f &trans)
+{
+	_model->setSceneTransformation(trans);
 }
 //======================================================
 
@@ -76,79 +108,7 @@ CVRMats::CVRMats(const CVRModel &model, Size viewSize, float fscale, float eyeDi
 	mModel = cvrm::I();
 	mView = cvrm::lookat(0.f, 0.f, eyeDist, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f);
 	mProjection = cvrm::perspective(viewSize.height*fscale, viewSize, zNear, zFar);
-}
-
-#include<iostream>
-using namespace std;
-
-inline Point3f _unproject(const CVRResult *r, float x, float y, const Matx44f &mModel, GLint viewport[4])
-{
-	Point3f p;
-	float z;
-	if (cv::resampleBL<float>(reinterpret_cast<const Mat1f&>(r->depth),z, x, y))
-	{
-		y = r->img.rows - y;
-
-		p = cvrm::unproject(Point3f(x, y, z), mModel, r->mats.mProjection, viewport);
-#if 0
-	//	printf("g=(%.2f,%.2f,%.2f)\n", p.x, p.y, p.z);
-
-		Matx44d mModeld = mModel;
-		Matx44d mProjd = mats.mProjection;
-		double X, Y, Z;
-		gluUnProject(x, y, z, mModeld.val, mProjd.val, viewport, &X, &Y, &Z);
-		p=Point3f(X, Y, Z);
-
-		gluProject(0.5, -0.5, 0, mModeld.val, mProjd.val, viewport, &X, &Y, &Z);
-		printf("prj=(%.2f,%.2f,%.2f)\n", X, Y, Z);
-
-#endif
-	}
-	else
-	{
-		CV_Error(ERROR_ACCESS_DENIED, "depth map unavailable or (x,y) out of the range");
-	}
-	
-	return p;
-}
-
-Point3f CVRResult::unproject(float x, float y) const
-{
-	Matx44f mModel = mats.mModeli*mats.mModel*mats.mView;
-	GLint viewport[4] = { 0,0,img.cols,img.rows };
-	return _unproject(this, x, y, mModel,viewport);
-}
-
-void  CVRResult::unproject(const cv::Point2f vpt[], cv::Point3f dpt[], int count) const
-{
-	Matx44f mModel = mats.mModeli*mats.mModel*mats.mView;
-	GLint viewport[4] = { 0,0,img.cols,img.rows };
-
-	for (int i = 0; i < count; ++i)
-		dpt[i] = _unproject(this, vpt[i].x, vpt[i].y, mModel, viewport);
-}
-
-cv::Point3f CVRResult::project(float x, float y, float z) const
-{
-	Matx44f mModel = mats.mModeli*mats.mModel*mats.mView;
-	GLint viewport[4] = { 0,0,img.cols,img.rows };
-
-	Point3f p = cvrm::project(Point3f(x, y, z), mModel, mats.mProjection, viewport);
-	p.y = img.rows - p.y;
-	return p;
-}
-
-void  CVRResult::project(const cv::Point3f vpt[], cv::Point3f dpt[], int count) const
-{
-	Matx44f mModel = mats.mModeli*mats.mModel*mats.mView;
-	GLint viewport[4] = { 0,0,img.cols,img.rows };
-	const int rows = img.rows;
-
-	for (int i = 0; i < count; ++i)
-	{
-		dpt[i] = cvrm::project(vpt[i], mModel, mats.mProjection, viewport);
-		dpt[i].y = rows - dpt[i].y;
-	}
+	//mProjection = cvrm::ortho(-1, 1, -1, 1, zNear, zFar);
 }
 
 void CVRResult::getDepthRange(float &minDepth, float &maxDepth) const
@@ -169,7 +129,18 @@ float CVRResult::getDepthRange() const
 	getDepthRange(minDepth, maxDepth);
 	return maxDepth - minDepth;
 }
-
+Mat1f CVRResult::getNormalizedDepth() const
+{
+	float minDepth, maxDepth;
+	this->getDepthRange(minDepth, maxDepth);
+	
+	Mat1f dn = depth.clone();
+	float scale = 1.0f / (maxDepth - minDepth);
+	for_each_1(DWHN1(dn), [minDepth, maxDepth, scale](float &f) {
+		f = f < maxDepth ? (f - minDepth)*scale : 1.0f;
+	});
+	return dn;
+}
 bool  CVRResult::getDepth(float x, float y, float &d) const
 {
 	bool r = false;
@@ -190,30 +161,84 @@ CVRResult CVRResult::blank(Size viewSize, const CVRMats &_mats)
 	return r;
 }
 
+CVRProjector::CVRProjector()
+{
+}
+
+CVRProjector::CVRProjector(const CVRResult &rr)
+{
+	auto &mats(rr.mats);
+	_mModelView = mats.mModeli*mats.mModel*mats.mView;
+	_mProjection = mats.mProjection;
+
+	Size sz = !rr.img.empty() ? rr.img.size() : rr.depth.size();
+	CV_Assert(sz.width > 0 && sz.height > 0);
+
+	_viewport = cv::Vec4i(0, 0, sz.width, sz.height);
+	_depth = rr.depth;
+}
+CVRProjector::CVRProjector(const CVRMats &mats, cv::Size viewSize)
+{
+	_mModelView = mats.mModeli*mats.mModel*mats.mView;
+	_mProjection = mats.mProjection;
+	_viewport = cv::Vec4i(0, 0, viewSize.width, viewSize.height);
+}
+CVRProjector::CVRProjector(const cv::Matx44f &mModelView, const cv::Matx44f &mProjection, cv::Size viewSize)
+	:_mModelView(mModelView), _mProjection(mProjection), _viewport(0, 0, viewSize.width, viewSize.height)
+{
+}
+
+cv::Point3f CVRProjector::unproject(float x, float y) const
+{
+	float z;
+	if (!cv::resampleBL<float>(reinterpret_cast<const Mat1f&>(_depth), z, x, y))
+		CV_Error(0, "depth map unavailable or (x,y) out of the range");
+	return unproject(x, y, z);
+}
+
+CVRModelEx::CVRModelEx(const CVRModel &_model, const Matx44f &_mModeli, const Matx44f &_mModel)
+	:model(_model),mModeli(_mModeli),mModel(_mModel)
+{}
+
+void CVRModelEx::render(const Matx44f &sceneModelView, int flags)
+{
+	Matx44f mx = mModeli*mModel*sceneModelView;
+	model.render(mx, flags);
+}
+
+void CVRModelArray::render(const Matx44f &sceneModelView, int flags)
+{
+	for (size_t i = 0; i < _v.size(); ++i)
+		_v[i].render(sceneModelView, flags);
+}
+
+void CVRRendableArray::render(const Matx44f &sceneModelView, int flags)
+{
+	for (size_t i = 0; i < _v.size(); ++i)
+		_v[i]->render(sceneModelView, flags);
+}
+
 //==========================================================================================
 
 class _CVRender
 {
 public:
-	CVRModel  _modelx;
-	_CVRModel   *_model=nullptr;
+	//CVRModelEx  _modelx;
+	CVRRendablePtr _rendablePtr;
+	CVRRendable  *_rendable = nullptr;
 
 	cv::Vec4f    _bgColor = cv::Vec4f(0, 0, 0, 0);
 	GLuint		 _bgTexID=0;
 public:
 	_CVRender()
 	{}
-	_CVRender(const CVRModel &model)
-		:_modelx(model)
+	_CVRender(CVRRendable &rendable)
+		:_rendable(&rendable)
 	{
-		_model =_modelx? _modelx._model.get() : nullptr;
-
-		if (_model)
-		{
-			cvrCall([this](int) {
-				_model->_loadTextures();
-			});
-		}
+	}
+	_CVRender(const CVRRendablePtr &rendablePtr)
+		:_rendablePtr(rendablePtr),_rendable(rendablePtr.get())
+	{
 	}
 	~_CVRender()
 	{
@@ -277,7 +302,7 @@ public:
 	}
 	CVRResult exec(const CVRMats &mats, Size viewSize, int output, int flags, CVRender::UserDraw *userDraw)
 	{
-		if (!_model) //return blank images
+		if (!_rendable) //return blank images
 			return CVRResult::blank(viewSize, mats);
 
 		theDevice.setSize(viewSize);
@@ -295,12 +320,13 @@ public:
 		glMatrixMode(GL_PROJECTION);
 		glLoadMatrixf(mats.mProjection.val);
 		
-		auto mx = mats.mModeli*mats.mModel*mats.mView;
-		glMatrixMode(GL_MODELVIEW);
-		glLoadMatrixf(mx.val);
+		auto sceneModelView = mats.mModeli*mats.mModel*mats.mView;
+		//glMatrixMode(GL_MODELVIEW);
+		//glLoadMatrixf(mx.val);
 		
 #if 1
-		_model->render(flags);
+		//_model->render(flags);
+		_rendable->render(sceneModelView, flags);
 #else
 		glBegin(GL_QUADS);
 		glColor3f(1, 1, 1);
@@ -343,6 +369,8 @@ public:
 			result.depth = depth;
 		}
 
+		//theDevice.postRedisplay();
+
 		checkGLError();
 
 		return result;
@@ -371,17 +399,20 @@ CVRender::UserDraw::~UserDraw()
 
 CVRender::CVRender()
 	:impl(new _CVRender())
-{}
+{} 
 
-CVRender::CVRender(const CVRModel &model)
-	:impl(new _CVRender(model))
+CVRender::CVRender(CVRRendable &rendable)
+	:impl(new _CVRender(rendable))
+{}
+CVRender::CVRender(CVRRendablePtr rendablePtr)
+	: impl(new _CVRender(rendablePtr))
 {}
 CVRender::~CVRender()
 {
 }
 bool CVRender::empty() const
 {
-	return !impl->_model;
+	return !impl->_rendable;
 }
 void CVRender::setBgImage(const cv::Mat &img)
 {
@@ -409,10 +440,10 @@ CVRResult CVRender::exec(CVRMats &mats, Size viewSize, int output, int flags, CV
 //	});
 //	return r;
 //}
-const CVRModel& CVRender::model() const
-{
-	return impl->_modelx;
-}
+//const CVRModel& CVRender::model() const
+//{
+//	return impl->_modelx;
+//}
 
 _CVR_API void drawPoints2(const cv::Point3f pts[], int npts, float pointSize)
 {
@@ -468,7 +499,7 @@ void CVRShowModelBase::showModel(const CVRModel &model)
 	this->waitDone();
 
 	this->model = model;
-	render = CVRender(model);
+	render = CVRender(this->model);
 	initMats = CVRMats(model, viewSize);
 	this->update(false);
 }
@@ -506,6 +537,8 @@ void proShowModelEvents(const _CVRShowModelEvent &evt, int nLeft)
 			tb.onMouseMove(evt.param1, evt.param2, theDevice.size());
 		else if (evt.code == cv::EVENT_MOUSEWHEEL)
 			tb.onMouseWheel(evt.param1, evt.param2, evt.data);
+		else if (evt.code == cv::EVENT_KEYBOARD)
+			tb.onKeyDown(evt.param1, evt.data);
 
 		CVRMats mats = evt.winData->initMats;
 		tb.apply(mats.mModel, mats.mView, true);
@@ -523,39 +556,40 @@ void _CVR_API _postShowModelEvent(const _CVRShowModelEvent &evt)
 	{
 		evt.winData->trackBall.onMouseDown(evt.param1, evt.param2);
 	}
-	else if(
-		evt.code==cv::EVENT_MOUSEMOVE && (evt.data&cv::EVENT_FLAG_LBUTTON) 
-		|| evt.code==cv::EVENT_MOUSEWHEEL
+	else if (
+		evt.code == cv::EVENT_MOUSEMOVE && (evt.data&cv::EVENT_FLAG_LBUTTON)
+		|| evt.code == cv::EVENT_MOUSEWHEEL || evt.code == cv::EVENT_KEYBOARD
 		)
 	{
 		cvrPost([evt](int nLeft) {
 			proShowModelEvents(evt, nLeft);
 		}, false);
-	}
-	else if (evt.code == cv::EVENT_KEYBOARD)
-	{
-		int key = evt.param1;
-		auto wd = evt.winData;
-		//use upper case to trigger key control
-		switch (key)
+
+		if (evt.code == cv::EVENT_KEYBOARD)
 		{
-		case 'L': //toggle lighting
-			wd->renderFlags ^= CVRM_ENABLE_LIGHTING;
-			break;
-		case 'M': //toggle material
-			wd->renderFlags ^= CVRM_ENABLE_MATERIAL;
-			break;
-		case 'T': //toggle texture
-			wd->renderFlags ^= CVRM_ENABLE_TEXTURE;
-			break;
-		case 'R': // no lighting for object with texture
-			wd->renderFlags ^= CVRM_TEXTURE_NOLIGHTING;
-			break;
-		default:
-			key = 0;
+			int key = evt.param1;
+			auto wd = evt.winData;
+			//use upper case to trigger key control
+			switch (key)
+			{
+			case 'L': //toggle lighting
+				wd->renderFlags ^= CVRM_ENABLE_LIGHTING;
+				break;
+			case 'M': //toggle material
+				wd->renderFlags ^= CVRM_ENABLE_MATERIAL;
+				break;
+			case 'T': //toggle texture
+				wd->renderFlags ^= CVRM_ENABLE_TEXTURE;
+				break;
+			case 'R': // no lighting for object with texture
+				wd->renderFlags ^= CVRM_TEXTURE_NOLIGHTING;
+				break;
+			default:
+				key = 0;
+			}
+			if (key != 0)
+				wd->update(false);
 		}
-		if (key != 0)
-			wd->update(false);
 	}
 }
 

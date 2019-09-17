@@ -151,9 +151,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CVCalib1.cpp" />
     <ClCompile Include="RenderExamples.cpp" />
     <ClCompile Include="impl.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="RenderVOC.cpp" />
     <ClCompile Include="ShowModels.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
