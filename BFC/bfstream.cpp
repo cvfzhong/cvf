@@ -166,11 +166,15 @@ void BMemoryStreamBuffer::Seek(PosType offset,int origin)
 	else
 		m_pcur=px;
 }
-void BMemoryStreamBuffer::Close()
+void BMemoryStreamBuffer::Clear()
 {
 	delete[]m_rbuf;
 
 	m_pbuf=m_pcur=m_peof=m_pend=m_rbuf=NULL;
+}
+void BMemoryStreamBuffer::Close()
+{
+	this->Clear();
 }
 long BMemoryStreamBuffer::Size() const
 {

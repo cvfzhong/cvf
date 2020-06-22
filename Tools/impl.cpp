@@ -6,4 +6,7 @@
 #include"CVX/src.cpp"
 
 #include"EDK/object.cpp"
- 
+
+#ifndef _WIN32
+#include"BFCS/commands.cpp"
+#endif

@@ -1,7 +1,7 @@
 
-#include"EDK/cmds.h"
+#include"appstd.h"
 
-int main()
+int main1()
 {
 	std::string dataDir = D_DATA+"/re3d/test/";
 
@@ -15,4 +15,14 @@ int main()
 	return 0;
 }
 
- 
+using ff::exec;
+
+int main()
+{
+	cvrInit("-display :0.0");
+	//exec("renderToVideo");
+	exec("renderVOC");
+	//exec("os.list-3dmodels");
+	return 0;
+}
+

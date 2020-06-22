@@ -779,12 +779,16 @@ const string_t* ArgSet::query(const char_t *var, int count, int pos,int *flag)
 	bool bfound;
 	const string_t* pr=m_pImp->query(var,count,pos,bfound);
 
-	if(!bfound&&m_pNext)
-		pr=m_pNext->query(var,count,pos);
-
-	if(flag&&!bfound)
-		*flag|=ASF_NOT_FOUND;
-
+	if (!bfound)
+	{
+		if (m_pNext)
+			pr = m_pNext->query(var, count, pos, flag);
+		else
+		{
+			if (flag)
+				*flag |= ASF_NOT_FOUND;
+		}
+	}
 	return pr;
 }
 int ArgSet::size() const

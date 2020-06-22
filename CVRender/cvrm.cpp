@@ -93,7 +93,8 @@ Matx44f cvrm::perspective(float fx, float fy, float cx, float cy, Size windowSiz
 
 
 	mProjection[8] = 1 - 2.0f * cx / width;
-	mProjection[9] = 2.0f * cy / height - 1.0f;
+	mProjection[9] = 2.0f * cy / height -1.0f;
+	//mProjection[9] = 1 - 2.0f * cy / height;
 	mProjection[10] = -(farP + nearP) / (farP - nearP);
 	mProjection[11] = -1.0f;
 
@@ -132,40 +133,29 @@ Matx44f cvrm::lookat(float eyex, float eyey, float eyez, float centerx, float ce
 	return cvtm(m);
 }
 
-static void extrinsicMatrix2ModelViewMatrix(cv::Matx33f rotation, cv::Vec3f translation, float* model_view_matrix)
+static void getGLModelView(const cv::Matx33f &R, const cv::Vec3f &t, float* mModelView)
 {
 	//绕X轴旋转180度，从OpenCV坐标系变换为OpenGL坐标系
-	static float d[] =
-	{
-		1,  0,  0,
-		0, -1,  0,
-		0,  0, -1
-	};
-	cv::Matx33f rx(d);
+	//同时转置，opengl默认的矩阵为列主序
+	mModelView[0] = R(0, 0);
+	mModelView[1] = -R(1, 0);
+	mModelView[2] = -R(2, 0);
+	mModelView[3] = 0.0f;
 
-	rotation = rx*rotation;
-	translation = rx*translation;
+	mModelView[4] = R(0, 1);
+	mModelView[5] = -R(1, 1);
+	mModelView[6] = -R(2, 1);
+	mModelView[7] = 0.0f;
 
-	//opengl默认的矩阵为列主序
-	model_view_matrix[0] = rotation(0, 0);
-	model_view_matrix[1] = rotation(1, 0);
-	model_view_matrix[2] = rotation(2, 0);
-	model_view_matrix[3] = 0.0f;
+	mModelView[8] = R(0, 2);
+	mModelView[9] = -R(1, 2);
+	mModelView[10] = -R(2, 2);
+	mModelView[11] = 0.0f;
 
-	model_view_matrix[4] = rotation(0, 1);
-	model_view_matrix[5] = rotation(1, 1);
-	model_view_matrix[6] = rotation(2, 1);
-	model_view_matrix[7] = 0.0f;
-
-	model_view_matrix[8] = rotation(0, 2);
-	model_view_matrix[9] = rotation(1, 2);
-	model_view_matrix[10] = rotation(2, 2);
-	model_view_matrix[11] = 0.0f;
-
-	model_view_matrix[12] = translation(0);
-	model_view_matrix[13] = translation(1);
-	model_view_matrix[14] = translation(2);
-	model_view_matrix[15] = 1.0f;
+	mModelView[12] = t(0);
+	mModelView[13] = -t(1);
+	mModelView[14] = -t(2);
+	mModelView[15] = 1.0f;
 }
 Matx44f cvrm::fromRT(const Vec3f &rvec, const Vec3f &tvec)
 {
@@ -175,21 +165,32 @@ Matx44f cvrm::fromRT(const Vec3f &rvec, const Vec3f &tvec)
 	cv::Matx33f R;
 	cv::Rodrigues(rvec, R);
 
+	return fromR33T(R,tvec);
+}
+Matx44f cvrm::fromR33T(const cv::Matx33f &R, const cv::Vec3f &tvec)
+{
 	cv::Matx44f m;
-	extrinsicMatrix2ModelViewMatrix(R, tvec, m.val);
+	getGLModelView(R, tvec, m.val);
 	return m;
 }
 
 void cvrm::decomposeRT(const Matx44f &m, Vec3f &rvec, Vec3f &tvec)
 {
+	cv::Matx33f R;
+	decomposeRT(m, R, tvec);
+	cv::Rodrigues(R, rvec);
+}
+
+void cvrm::decomposeRT(const Matx44f &m, cv::Matx33f &R, cv::Vec3f &tvec)
+{
 	const float *v = m.val;
-	tvec[0] =  v[12];
+	CV_Assert(fabs(v[3]) < 1e-3f && fabs(v[7]) < 1e-3&&fabs(v[11]) < 1e-3&&fabs(v[15] - 1.0f) < 1e-3f);
+
+	tvec[0] = v[12];
 	tvec[1] = -v[13];
 	tvec[2] = -v[14];
 
-	cv::Matx33f R(v[0],v[4],v[8],-v[1],-v[5],-v[9],-v[2],-v[6],-v[10]);
-
-	cv::Rodrigues(R, rvec);
+	R=cv::Matx33f(v[0], v[4], v[8], -v[1], -v[5], -v[9], -v[2], -v[6], -v[10]);
 }
 
 #if 0

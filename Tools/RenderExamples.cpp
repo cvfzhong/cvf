@@ -1,8 +1,5 @@
 
-#include"EDK/cmds.h"
-#include"BFC/portable.h"
-#include"CVX/vis.h"
-#include"BFC/stdf.h"
+#include"appstd.h"
 
 _CMDI_BEG
 
@@ -186,40 +183,7 @@ public:
 	}
 	void renderToVideo(std::string dataDir, std::string args)
 	{
-		std::string file = dataDir + "/3d/car.3ds";
-
-		CVRModel model(file);
-		CVRender render(model);
-		Size viewSize(800, 800);
-		render.setBgColor(1, 1, 1);
-
-		CVRMats matsInit(model, viewSize);
-
-		cv::VideoWriter vw;
-		vw.open("./" + ff::GetFileName(file, false) + ".avi", CV_FOURCC('M', 'J', 'P', 'G'), 15, viewSize);
-
-		float angle = 0;
-		float delta = CV_PI*2/100;
-		while (true)
-		{
-			angle += delta;
-
-			CVRMats mats(matsInit);
-
-			//rotate the object
-			mats.mModel = mats.mModel * cvrm::rotate(angle, Vec3f(0, 1, 0));
-
-			CVRResult result = render.exec(mats, viewSize,3, CVRM_DEFAULT&~CVRM_ENABLE_TEXTURE);
-			flip(result.img, result.img, -1);
-			
-			imshow("img", result.img);
-			vw.write(result.img);
-
-			waitKey(1);
-			//if (waitKey(1) == KEY_ESCAPE)
-			if(angle>=CV_PI*2)
-				break;
-		}
+		
 	}
 	virtual void exec(std::string dataDir, std::string args)
 	{
@@ -232,6 +196,94 @@ public:
 };
 
 REGISTER_CLASS(RenderExamples)
+
+_CMDI_END
+
+
+_CMDI_BEG
+
+void renderModelToVideo(const std::string &modelFile, const std::string &vidFile, const std::string &imageFile)
+{
+	CVRModel model(modelFile);
+	CVRender render(model);
+	Size viewSize(800, 800);
+	render.setBgColor(1, 1, 1);
+
+	CVRMats matsInit(model, viewSize);
+
+	cv::VideoWriter vw;
+	vw.open(vidFile, CV_FOURCC('M', 'J', 'P', 'G'), 15, viewSize);
+
+	matsInit.mModel = cvrm::rotate(-CV_PI/2, Vec3f(1, 0, 0));
+
+	float angle = 0;
+	float delta = CV_PI * 2 / 100;
+	bool isFirst=true;
+	while (true)
+	{
+		angle += delta;
+
+		CVRMats mats(matsInit);
+
+		//rotate the object
+		mats.mModel = mats.mModel * cvrm::rotate(angle, Vec3f(0, 1, 0));
+
+		//CVRResult result = render.exec(mats, viewSize, 3, CVRM_DEFAULT&~CVRM_ENABLE_TEXTURE);
+		CVRResult result = render.exec(mats, viewSize, CVRM_IMAGE);
+		flip(result.img, result.img, -1);
+
+		imshow("img", result.img);
+		if (angle>delta + 1e-6f) //ignore the first frame
+		{
+			if(isFirst&&!imageFile.empty())
+			{
+				imwrite(imageFile,result.img);
+				isFirst=false;
+			}
+			vw.write(result.img);
+		}	
+
+		waitKey(1);
+		//if (waitKey(1) == KEY_ESCAPE)
+		if (angle >= CV_PI * 2)
+			break;
+	}
+}
+
+void renderDirModelsToVideo(const std::string &dir)
+{
+	//std::string dataDir = D_DATA + "/re3d/3ds-models/";
+
+	std::vector<std::string> subDirs;
+	ff::listSubDirectories(dir, subDirs, false, false);
+
+	for (auto &d : subDirs)
+	{
+		std::string name = ff::GetFileName(d, false);
+		if(ff::IsDirChar(name.back()))
+			name.pop_back();
+
+		std::string file = dir + d + "/" + name + ".3ds";
+		if (ff::pathExist(file))
+		{
+			printf("%s\n", file.c_str());
+			std::string vidFile = dir + d + "/" + name + ".avi";
+			std::string imageFile=dir+"/"+name+".png";
+			renderModelToVideo(file, vidFile,imageFile);
+		}
+		//break;
+	}
+}  
+ 
+void on_renderToVideo()
+{
+	//renderDirModelsToVideo(D_DATA + "/re3d/3ds-model/");
+	renderDirModelsToVideo(D_DATA + "/re3d/models-618/");
+}
+
+CMD_BEG()
+CMD("renderToVideo", on_renderToVideo, "render 3d models as video file", "", "")
+CMD_END()
 
 _CMDI_END
 

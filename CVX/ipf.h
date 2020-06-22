@@ -3,12 +3,6 @@
 
 #include"def.h"
 #include"iop.h"
-#include"max_min_filter.h"
-#include"cc.h"
-#include"mean_filter.h"
-#include"resize.h"
-#include"resample.h"
-#include"gaussian_filter.h"
 
 #include"BFC/ctc.h"
 #include"opencv2/core/types.hpp"
@@ -318,3 +312,9 @@ inline void warp_by_flow_nn(const _PValT *src, int width, int height, int sstrid
 
 _CVX_END
 
+#include"max_min_filter.h"
+#include"cc.h"
+#include"mean_filter.h"
+#include"resize.h"
+#include"resample.h"
+#include"gaussian_filter.h"

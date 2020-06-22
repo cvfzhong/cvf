@@ -5,8 +5,13 @@
 #include "assimp/postprocess.h"
 #include"assimp/Exporter.hpp"
 
+#ifdef _WIN32
 #define FREEGLUT_STATIC
 #include"GL/freeglut.h"
+#else
+#   include <GL/gl.h>
+#   include <GL/glu.h>
+#endif
 
 #include"opencv2/highgui.hpp"
 #include"opencv2/imgproc.hpp"
@@ -159,6 +164,9 @@ struct _CVRModel
 {
 public:
 	std::string    sceneFile;
+	aiMatrix4x4    _sceneTransformInFile;
+	Matx44f        _sceneTransform=cvrm::I();
+
 	aiScene *scene = nullptr;
 	aiVector3D scene_min, scene_max, scene_center;
 
@@ -167,6 +175,9 @@ public:
 	TexMap       _texMap;
 	GLuint		_sceneList = 0;
 	int			_sceneListRenderFlags = -1;
+
+	std::vector<Vec3f> _vertices;
+
 public:
 	~_CVRModel()
 	{
@@ -204,7 +215,9 @@ public:
 
 	void saveAs(const std::string &file, std::string fmtID, const std::string & options);
 	
-	void load(const std::string &file, int postProLevel);
+	//void _loadExtFile(const std::string &file, ff::ArgSet &args);
+
+	void load(const std::string &file, int postProLevel, const std::string &options);
 
 	void _updateSceneInfo();
 	
@@ -217,11 +230,18 @@ public:
 
 	void render(int flags);
 
+	const std::vector<Vec3f>& getVertices();
+
 	Matx44f calcStdPose();
 
-	void  setSceneTransformation(const Matx44f &trans);
+	void  setSceneTransformation(const Matx44f &trans, bool updateSceneInfo=true);
 
-	Matx44f getModeli()
+	Matx44f getSceneTransformation() const
+	{
+		return _sceneTransform;
+	}
+
+	/*Matx44f getModeli()
 	{
 		if (!scene)
 			return cvrm::I();
@@ -239,7 +259,7 @@ public:
 
 			return cvrm::translate(-scene_center.x, -scene_center.y, -scene_center.z) * cvrm::scale(tmp, tmp, tmp);
 		}
-	}
+	}*/
 };
 
 void postShowImage(CVRShowModelBase *winData);

@@ -33,6 +33,30 @@ inline Mat vis(const Mat &img)
 
 	return dimg;
 }
+inline Mat visf(const Mat &img, double maxVal = -1.0)
+{
+	Mat dimg;
+	if (img.depth() != CV_8U)
+	{
+		if (maxVal <= 0)
+		{
+			Mat imgf = img;
+			if (img.depth() != CV_32F)
+				img.convertTo(imgf, CV_32F);
+			for_each_1(imgf.ptr<float>(), imgf.cols*imgf.channels(), imgf.rows, stepC(imgf), ccn1(), [&maxVal](float v) {
+				if (v > maxVal)
+					maxVal = v;
+			});
+		}
+
+		img.convertTo(dimg, CV_8U, 255/maxVal);
+	}
+	else
+		dimg = img;
+
+	return dimg;
+}
+
 
 template<typename _IndexPtrT>
 inline void _vis_index(cv::Mat &cimg, _IndexPtrT cc, int width, int height, int cstride, int color_table_size, const uchar *vcolor = NULL)

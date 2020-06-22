@@ -41,18 +41,6 @@ _CVR_API CVRLockPtr cvrLockGL()
 }
 #endif
 
-static void _callInitGLUT()
-{
-	static bool inited = false;
-	if (!inited)
-	{
-		int argc = 1;
-		char *argv = "CVRender";
-
-		glutInit(&argc, &argv);
-		inited = true;
-	}
-}
 
 static void displayCB()
 {
@@ -86,7 +74,36 @@ void _initGL()
 	glEnable(GL_COLOR_MATERIAL);
 }
 
+void cvrInit2(const char *args);
+
+static decltype(std::atexit) *g_atexitFP = nullptr;
+
+_CVR_API void cvrInit(const char *args, void *atexitFP)
+{
+	if(!g_atexitFP)
+		g_atexitFP = (decltype(std::atexit) *)atexitFP;
+	cvrInit2(args);
+}
+
+//_CVR_API void cvrUninit()
+//{
+//	cvrWaitFinish();
+//}
+
 #ifdef _WIN32
+
+void cvrInit2(const char *args)
+{
+	static bool inited = false;
+	if (!inited)
+	{
+		int argc = 1;
+		char *argv[] = {""};
+
+		glutInit(&argc, argv);
+		inited = true;
+	}
+}
 
 class _CVRDevice
 {
@@ -108,7 +125,7 @@ public:
 	}
 	void create(int width, int height, int flags, const std::string &name)
 	{
-		_callInitGLUT();
+		cvrInit2(NULL);
 
 		//std::cout <<"init. GLUT in:" << std::this_thread::get_id() << std::endl;
 
@@ -143,7 +160,7 @@ public:
 		Size newSize(width, height);
 		if (newSize != _size)
 		{
-		//	CVR_LOCK();
+			//	CVR_LOCK();
 
 			this->setCurrent();
 			glutReshapeWindow(width, height);
@@ -161,7 +178,7 @@ public:
 	}
 };
 
-#else
+#elif 0
 
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -170,12 +187,20 @@ public:
 
 typedef GLXContext(*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 typedef Bool(*glXMakeContextCurrentARBProc)(Display*, GLXDrawable, GLXDrawable, GLXContext);
+
 static glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
 static glXMakeContextCurrentARBProc glXMakeContextCurrentARB = 0;
 
-int testX11() {
+int createGLContext1() {
 	static int visual_attribs[] = {
-		None
+		GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT,
+		GLX_RENDER_TYPE, GLX_RGBA_BIT,
+		GLX_RED_SIZE, 1,
+		GLX_GREEN_SIZE, 1,
+		GLX_BLUE_SIZE, 1,
+		GLX_ALPHA_SIZE, 1,
+		GLX_DOUBLEBUFFER, GL_FALSE,
+		0
 	};
 	int context_attribs[] = {
 		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
@@ -223,6 +248,7 @@ int testX11() {
 		GLX_PBUFFER_HEIGHT, 800,
 		None
 	};
+	
 	pbuf = glXCreatePbuffer(dpy, fbc[0], pbuffer_attribs);
 
 	XFree(fbc);
@@ -246,45 +272,70 @@ int testX11() {
 	return 0;
 }
 
-int createGLContext() {
+
+//we should call initDisplay in the main-thread, and the createContext in the background-thread
+class GLInit
+{
 	Display *dpy;
 	Window root;
-	GLint attr[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
 	XVisualInfo *vi;
-	GLXContext glc;
+public:
+	void initDisplay(ff::ArgSet &args)
+	{
+		GLint attr[] = { GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None };
 
-	/* open display */
-	if (!(dpy = XOpenDisplay(NULL))) {
-		fprintf(stderr, "cannot connect to X server\n\n");
-		exit(1);
+		std::string disp=args.getd<std::string>("display","");
+		/* open display */
+		if (!(dpy = XOpenDisplay(disp.empty()? NULL : disp.c_str()))) {
+			fprintf(stderr, "cannot connect to X server\n\n");
+			exit(1);
+		}
+
+		/* get root window */
+		root = DefaultRootWindow(dpy);
+
+		/* get visual matching attr */
+		if (!(vi = glXChooseVisual(dpy, 0, attr))) {
+			fprintf(stderr, "no appropriate visual found\n\n");
+			exit(1);
+		}
 	}
+	void createContext()
+	{
+		GLXContext glc;
 
-	/* get root window */
-	root = DefaultRootWindow(dpy);
-
-	/* get visual matching attr */
-	if (!(vi = glXChooseVisual(dpy, 0, attr))) {
-		fprintf(stderr, "no appropriate visual found\n\n");
-		exit(1);
+		/* create a context using the root window */
+		if (!(glc = glXCreateContext(dpy, vi, NULL, GL_TRUE))) {
+			fprintf(stderr, "failed to create context\n\n");
+			exit(1);
+		}
+		
+		glXMakeCurrent(dpy, root, glc);
 	}
+};
 
-	/* create a context using the root window */
-	if (!(glc = glXCreateContext(dpy, vi, NULL, GL_TRUE))) {
-		fprintf(stderr, "failed to create context\n\n");
-		exit(1);
+static GLInit glInit;
+
+void cvrInit2(const char *argStr)
+{
+	static bool inited = false;
+	if (!inited)
+	{
+		ff::ArgSet args;
+		if(argStr)
+			args.setArgs(argStr);
+		glInit.initDisplay(args);
+
+		inited = true;
 	}
-	glXMakeCurrent(dpy, root, glc);
-
-	/* try it out, remember to *NOT* render to the default framebuffer! */
-	//printf("vendor: %s\n", (const char*)glGetString(GL_VENDOR));
-
-	return 0;
 }
+
+//int glcreate=createGLContext(false);
 
 class _CVRDevice
 {
 public:
-	Size _size=Size(-1,-1);
+	Size _size = Size(-1, -1);
 public:
 	~_CVRDevice()
 	{
@@ -296,21 +347,182 @@ public:
 	void create(int width, int height, int flags, const std::string &name)
 	{
 		//CVR_LOCK();
-		createGLContext();
+		cvrInit2(NULL);
+		glInit.createContext();
+
 		_initGL();
-		_size=Size(0,0);
-		this->setSize(width,height);
+		_size = Size(0, 0);
+		this->setSize(width, height);
 	}
 
 	void setCurrent()
 	{
-		
+
 	}
 	void setSize(int width, int height)
 	{
 		Size newSize(width, height);
 		if (newSize != _size)
 		{
+			glViewport(0, 0, width, height);
+			_size = newSize;
+		}
+	}
+	void postRedisplay()
+	{
+	}
+};
+
+#else
+
+#include <EGL/egl.h>
+#include <X11/X.h>
+
+static EGLDisplay eglDpy=EGL_NO_DISPLAY;
+static EGLConfig eglCfg;
+
+void cvrInit2(const char *args)
+{
+	// 1. Initialize EGL
+	eglDpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+	if(eglDpy==EGL_NO_DISPLAY)
+	{
+		std::string dpyName=":0.0";
+		if(args)
+		{
+			ff::ArgSet argSet(args);
+			dpyName=argSet.getd<std::string>("display",dpyName);
+		}
+		Display *dpy=XOpenDisplay(dpyName.empty()? NULL : dpyName.c_str());
+		eglDpy=eglGetDisplay((EGLNativeDisplayType)dpy);
+	}
+	if (eglDpy == EGL_NO_DISPLAY)
+	{
+		printf("EGL: can't open display");
+		return;
+	}
+
+	EGLint major, minor; 
+
+	eglInitialize(eglDpy, &major, &minor);
+
+	// 2. Select an appropriate configuration
+	EGLint numConfigs;
+
+	static const EGLint configAttribs[] = {
+		EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+		EGL_BLUE_SIZE, 8,
+		EGL_GREEN_SIZE, 8,
+		EGL_RED_SIZE, 8,
+		EGL_DEPTH_SIZE, 8,
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+		EGL_NONE
+	};
+	eglChooseConfig(eglDpy, configAttribs, &eglCfg, 1, &numConfigs);
+}
+
+static cv::Size  eglBufSize(0, 0);
+
+bool cvrSetGLContext(Size size)
+{
+	if(eglDpy==EGL_NO_DISPLAY)
+	{
+		cvrInit2(NULL);
+		if(eglDpy==EGL_NO_DISPLAY)
+			return false;
+	}
+	static EGLSurface eglSurf=NULL;
+	static EGLContext eglCtx=NULL;
+
+	if (eglCtx && size.width <= eglBufSize.width && size.height <= eglBufSize.height)
+		return true;
+
+	auto dsize=[](int w){
+		enum{S=512};
+		w=w%S==0? w/S : w/S+1;
+		return __max(w,2)*S; //minSize=2*S=1024
+	};
+	
+	size = cv::Size(dsize(size.width), dsize(size.height));
+
+	const EGLint pbufferAttribs[] = {
+		EGL_WIDTH, size.width,
+		EGL_HEIGHT, size.height,
+		EGL_NONE,
+	};
+
+	//printf("EGL: set size to (%d,%d)\n",size.width,size.height);
+
+	// 3. Create a surface
+	EGLSurface _eglSurf = eglCreatePbufferSurface(eglDpy, eglCfg, pbufferAttribs);
+	if (!_eglSurf)
+	{
+		printf("EGL: failed to create surface");
+		return false;
+	}
+	else
+	{
+		if (eglSurf)
+			eglDestroySurface(eglDpy,eglSurf);
+		eglSurf = _eglSurf;
+	}
+
+	if (!eglCtx)
+	{
+		// 4. Bind the API
+		eglBindAPI(EGL_OPENGL_API);
+
+		// 5. Create a context and make it current
+		EGLContext _eglCtx = eglCreateContext(eglDpy, eglCfg, EGL_NO_CONTEXT, NULL);
+		if (!_eglCtx)
+		{
+			printf("EGL: failed to create context");
+			return false;
+		}
+		else
+			eglCtx = _eglCtx;
+	}
+
+	eglMakeCurrent(eglDpy, eglSurf, eglSurf, eglCtx);
+	eglBufSize=size;
+
+	return true;
+}
+
+class _CVRDevice
+{
+public:
+	Size _size = Size(-1, -1);
+public:
+	~_CVRDevice()
+	{
+		//release();
+	}
+	void release()
+	{
+	}
+	void create(int width, int height, int flags, const std::string &name)
+	{
+		//CVR_LOCK();
+		//cvrInitGL();
+		cvrSetGLContext(Size(width, height));
+
+		_initGL();
+		_size = Size(0, 0);
+		this->setSize(width, height);
+	}
+
+	void setCurrent()
+	{
+
+	}
+	void setSize(int width, int height)
+	{
+		Size newSize(width, height);
+		if (newSize != _size)
+		{
+			cvrSetGLContext(Size(width, height));
+
 			glViewport(0, 0, width, height);
 			_size = newSize;
 		}
@@ -369,6 +581,17 @@ static std::mutex g_glEventsMutex;
 static std::condition_variable g_glWaitCV;
 CVRDevice  theDevice;
 
+//struct _WaitNoEvents
+//{
+//	~_WaitNoEvents()
+//	{
+//		cvrWaitFinish();
+//	}
+//};
+
+//wait no events when program exit
+//_WaitNoEvents _g_waitNoEvents; 
+
 static void glEventsProc()
 {
 	g_glThreadID = std::this_thread::get_id();
@@ -376,49 +599,97 @@ static void glEventsProc()
 	//create the device in the background thread
 	theDevice = CVRDevice(Size(10, 10));
 
-	while (true)
-	{
-		GLEvent *evt = nullptr;
-		int nLeft = 0;
+	try{
+		while (true)
 		{
-			std::lock_guard<std::mutex> lock(g_glEventsMutex);
-
-			if (!g_glEvents.empty())
+			GLEvent *evt = nullptr;
+			int nLeft = 0;
 			{
-				evt = g_glEvents.front();
-				g_glEvents.pop_front();
-				nLeft = (int)g_glEvents.size();
+				std::lock_guard<std::mutex> lock(g_glEventsMutex);
+
+				if (!g_glEvents.empty())
+				{
+					evt = g_glEvents.front();
+					g_glEvents.pop_front();
+					nLeft = (int)g_glEvents.size();
+				}
+			}
+
+			if (!evt)
+			{
+				g_glWaitCV.notify_all();
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			else
+			{
+				evt->exec(nLeft);
+				evt->release();
 			}
 		}
-
-		if (!evt)
-		{
-			g_glWaitCV.notify_all();
-			std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		}
-		else
-		{
-			evt->exec(nLeft);
-			evt->release();
-		}
 	}
-}
+	catch(const std::exception &ec)
+	{
+		printf("Error of CVRender : %s\n", ec.what());
+	}
+	catch(...)
+	{
+		printf("Error of CVRender : unknown\n");
+	}
+} 
 
 void cvrWaitFinish()
 {
 	std::mutex  waitMutex;
 	std::unique_lock<std::mutex> lock(waitMutex);
 	g_glWaitCV.wait(lock);
+	//if(!g_glEvents.empty())
+	{
+		while(true)
+		{
+			bool isEmpty=false;
+			{
+				std::lock_guard<std::mutex> lock(g_glEventsMutex);
+				isEmpty=g_glEvents.empty();
+			}
+			if(isEmpty)
+				break;
+			else
+			{
+				printf("CVRender: wait failed\n");
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+		}
+	}
 }
+
+static void _atExit()
+{
+	//printf("_atExit\n");
+	cvrWaitFinish();
+}
+
+static std::mutex _postMutex;
 
 void cvrPostEvent(GLEvent *evt, bool wait)
 {
+	std::lock_guard<std::mutex> _lock(_postMutex);
+
 	static bool threadStarted = false;
 	if (!threadStarted)
 	{
-		std::thread t(glEventsProc);
-		t.detach();
-		threadStarted = true;
+		std::lock_guard<std::mutex> lock(g_glEventsMutex);
+
+		if (!threadStarted)
+		{
+			std::thread t(glEventsProc);
+			t.detach();
+			threadStarted = true;
+
+			if (g_atexitFP)
+				g_atexitFP(_atExit);
+			/*else
+				std::atexit(_atExit);*/
+		}
 	}
 	//if posted from the GL thread itself and required to wait finish, execute directly without post event
 	if (wait && std::this_thread::get_id() == g_glThreadID)
@@ -443,7 +714,7 @@ void cvrPostEvent(GLEvent *evt, bool wait)
 template<typename _OpT>
 void _forNodeVetices(const aiScene *sc, const struct aiNode* nd, aiMatrix4x4 &prevT, _OpT &op)
 {
-	aiMatrix4x4 T = prevT; 
+	aiMatrix4x4 T = prevT;
 	aiMultiplyMatrix4(&T, &nd->mTransformation);
 
 	for (uint n = 0; n < nd->mNumMeshes; ++n)
@@ -480,7 +751,7 @@ void _forNodeVetices(const aiScene *sc, const struct aiNode* nd, aiMatrix4x4 &pr
 }
 
 template<typename _OpT>
-void _forAllVetices(const aiScene *sc, _OpT &op)
+void _forAllVetices(const aiScene *sc, _OpT op)
 {
 	aiMatrix4x4 T;
 	aiIdentityMatrix4(&T);
@@ -597,7 +868,31 @@ static void loadTextureImages(const aiScene* scene, const std::string &modelDir,
 	}
 }
 
-void _CVRModel::load(const std::string &file, int postProLevel)
+//void _CVRModel::_loadExtFile(const std::string &file, ff::ArgSet &args)
+//{
+//	cv::FileStorage xfs(file, FileStorage::READ);
+//
+//	Mat pose0;
+//	xfs["pose0"] >> pose0;
+//	this->setSceneTransformation(Matx44f(pose0), false);
+//}
+
+template<typename _ValT>
+inline bool readStorage(cv::FileStorage &fs, const std::string &var, _ValT &val) {
+	if (!fs.isOpened())
+		return false;
+
+	try {
+		fs[var] >> val;
+	}
+	catch (...)
+	{
+		return false;
+	}
+	return true;
+}
+
+void _CVRModel::load(const std::string &file, int postProLevel, const std::string &options)
 {
 	uint postPro = postProLevel == 0 ? 0 :
 		postProLevel == 1 ? aiProcessPreset_TargetRealtime_Fast :
@@ -612,6 +907,27 @@ void _CVRModel::load(const std::string &file, int postProLevel)
 
 	scene = newScene;
 	sceneFile = file;
+
+	_sceneTransformInFile = scene->mRootNode->mTransformation;
+	_sceneTransform = cvrm::I();
+
+	ff::CommandArgSet args(options);
+
+	cv::FileStorage xfs;
+	std::string extFile = args.getd<std::string>("extFile", "");
+	if (extFile.empty())
+		extFile = ff::ReplacePathElem(file, "yml", ff::RPE_FILE_EXTENTION);
+	if (ff::pathExist(extFile))
+		xfs.open(extFile, FileStorage::READ);
+
+	if (args.getd<bool>("setPose0", false))
+	{
+		Mat pose0;
+		if (!readStorage(xfs, "pose0", pose0))
+			pose0 = Mat(this->calcStdPose());
+
+		this->setSceneTransformation(Matx44f(pose0), false);
+	}
 
 	this->_updateSceneInfo();
 
@@ -1049,35 +1365,52 @@ void _getAllVetices(const aiScene *sc, std::vector<Vec3f> &vtx)
 	});
 }
 
-Matx44f _CVRModel::calcStdPose()
+const std::vector<Vec3f>& _CVRModel::getVertices()
 {
-	std::vector<Vec3f>  vtx;
-	_getAllVetices(scene, vtx);
-
-	Mat mvtx(vtx.size(), 3, CV_32FC1, &vtx[0]);
-	cv::PCA pca(mvtx, noArray(), PCA::DATA_AS_ROW);
-	
-	Vec3f mean = pca.mean;
-	Matx33f ev=pca.eigenvectors;
-
-	return cvrm::translate(-mean[0],-mean[1],-mean[2])*cvrm::rotate(&ev(1,0),&ev(0,0),&ev(2,0));
+	if(_vertices.empty())
+		_getAllVetices(scene, _vertices);
+	return _vertices;
 }
 
-void _CVRModel::setSceneTransformation(const Matx44f &trans)
+Matx44f _CVRModel::calcStdPose()
+{
+	const std::vector<Vec3f>  &vtx=this->getVertices();
+
+	Mat mvtx(vtx.size(), 3, CV_32FC1, (void*)&vtx[0]);
+	cv::PCA pca(mvtx, noArray(), PCA::DATA_AS_ROW);
+
+	Vec3f mean = pca.mean;
+	Matx33f ev = pca.eigenvectors;
+
+	//swap x-y so that the vertical directional is the longest dimension
+	Vec3f vx(-ev(1, 0), -ev(1, 1), -ev(1, 2));
+	Matx44f R = cvrm::rotate(&vx[0], &ev(0, 0), &ev(2, 0));
+	//std::cout << R << std::endl;
+	//std::cout << "det=" << determinant(R) << std::endl;
+
+	return cvrm::translate(-mean[0], -mean[1], -mean[2])*R;
+}
+
+void _CVRModel::setSceneTransformation(const Matx44f &trans, bool updateSceneInfo)
 {
 	aiMatrix4x4 m;
-	static_assert(sizeof(m) == sizeof(trans),"");
+	static_assert(sizeof(m) == sizeof(trans), "");
 	memcpy(&m, &trans, sizeof(m));
 	m.Transpose();
 
-	aiMultiplyMatrix4(&m, &scene->mRootNode->mTransformation);
+	aiMultiplyMatrix4(&m, &_sceneTransformInFile);
 	scene->mRootNode->mTransformation = m;
 
-	this->_updateSceneInfo();
+	if (updateSceneInfo)
+		this->_updateSceneInfo();
+
+	_sceneTransform = trans;
+	_vertices.clear();
 }
 
-//==========================================================
 
+//==========================================================
+#if 0
 struct ShowImageEvent
 {
 	CVRShowModelBase *winData;
@@ -1130,7 +1463,8 @@ void postShowImage(CVRShowModelBase *winData)
 	}
 	{
 		std::lock_guard<std::mutex> lock(g_showImageMutex);
-		g_showImageEvents.push_back({ winData, winData->currentResult});
+		//g_showImageEvents.push_back({ winData, winData->currentResult });
 	}
 }
+#endif
 

@@ -12,6 +12,9 @@
 #include"BFC/stdf.h"
 #include"BFC/err.h"
 
+#define DEV
+
+
 _FF_BEG
 
 _BFC_API bool  initPortable(int argc, char *argv[])

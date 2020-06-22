@@ -9,7 +9,7 @@
     <D_OPENCV>$(D_CVFX)/opencv$(OPENCV_VER)/</D_OPENCV>
     <D_INCLUDE>$(D_CVF)/;$(D_OPENCV)/include;$(D_OPENCV)/include/opencv/;$(D_CVFX)/freeglut300/include/;$(D_CVFX)/assim410/include;$(D_CVFX)/glm0963/include/;$(D_CVFX)/codec10/include/;$(D_CVFX)/libx1/;$(D_CVFX)/glew/include;</D_INCLUDE>
     <D_LIB>$(D_CVFX)/bin/$(Platform)/;$(D_OPENCV)/$(BIN_PATH);$(D_CVFX)/freeglut300/$(BIN_PATH);$(D_CVFX)/assim410/$(BIN_PATH);$(D_CVFX)/libx1/$(BIN_PATH);$(D_CVFX)/codec10/lib/$(Platform)/;$(D_CVFX)/glew/bin/Release/$(Platform)/;</D_LIB>
-    <D_PATH>$(D_LIB);</D_PATH>
+    <D_PATH>$(D_LIB);F:\paddle\fluid_inference_install_dir\paddle\lib;F:\sdk\cuda101\bin;</D_PATH>
   </PropertyGroup>
   <PropertyGroup>
     <LibraryWPath>$(WindowsSDK_MetadataPath);</LibraryWPath>

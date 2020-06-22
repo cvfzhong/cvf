@@ -56,6 +56,9 @@ inline char AllowCopyWithMemory(cv::Matx<_Tp,m,n>);
 template<typename _Tp>
 inline char AllowCopyWithMemory(cv::Rect_<_Tp>);
 
+template<typename _Tp>
+inline char AllowCopyWithMemory(cv::Size_<_Tp>);
+
 _CVX_END
 
 

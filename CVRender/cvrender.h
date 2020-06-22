@@ -34,6 +34,9 @@ using cv::Matx44f;
 using cv::Matx33f;
 using cv::Size;
 
+_CVR_API void cvrInit(const char *args = NULL, void *atexitFP=std::atexit);
+//_CVR_API void cvrUninit();
+
 class _CVR_API cvrm
 {
 public:
@@ -68,9 +71,13 @@ public:
 	//Note: @rvec and @tvec are in OpenCV coordinates, returned 4x4 matrix is in OpenGL coordinates
 	static Matx44f fromRT(const cv::Vec3f &rvec, const cv::Vec3f &tvec);
 
+	static Matx44f fromR33T(const cv::Matx33f &R, const cv::Vec3f &tvec);
+
 	//decompose a 3x4 (OpenGL) transformation matrix to (OpenCV) Rotation-Translation vectors
 	//the matrix @m should contain only rotation and translation
 	static void decomposeRT(const Matx44f &m, cv::Vec3f &rvec, cv::Vec3f &tvec);
+
+	static void decomposeRT(const Matx44f &m, cv::Matx33f &R, cv::Vec3f &tvec);
 
 	static Matx44f lookat(float eyex, float eyey, float eyez, float centerx, float centery, float centerz, float upx, float upy, float upz);
 
@@ -126,7 +133,7 @@ public:
 
 	The @postProLevel (0-3) specifies the post-processing levels for optimizing the mesh for rendering. 0 means no post processing.
 	*/
-	void load(const std::string &file, int postProLevel=3);
+	void load(const std::string &file, int postProLevel=3, const std::string &options="");
 
 	/* save the model to a file, any file format that supported by Assimp can be used, such as .obj, .3ds, .ply, .stl, .dae ,...
 	 @fmtID : a string to specify the file format, the file extension will be used if is empty.
@@ -135,19 +142,36 @@ public:
 	void saveAs(const std::string &file, const std::string &fmtID = "", const std::string &options="-std");
 
 	//get a transformation that transform the model to a standard position and size (centered at the origin and scale to fit in a unit cube)
+	static Matx44f getUnitize(const cv::Vec3f &center, const cv::Vec3f &bbMin, const cv::Vec3f &bbMax);
+
 	Matx44f getUnitize() const;
 
 	cv::Vec3f getCenter() const;
 
+	const std::vector<cv::Vec3f>& getVertices() const;
+
 	void    getBoundingBox(cv::Vec3f &cMin, cv::Vec3f &cMax) const;
 
+	//get size of bounding box
 	cv::Vec3f  getSizeBB() const ;
 
 	const std::string& getFile() const;
 
-	Matx44f calcStdPose() const;
+	/*set a transformation to the model that place it in a standard way
+	  this transformation will be applied before the transformations in CVRMats 
+	  i.e., it acts as a change to the coordinates of model vertices.
+	*/
+	void    setPose0(const Matx44f &trans);
 
-	void    setTransformation(const Matx44f &trans);
+	/*get the current Pose0
+	note that @load also may set Pose0 if the option "-setPose0" is specified
+	*/
+	Matx44f getPose0() const;
+
+	/*estimate Pose0 that shift object center to the origin, and rotate object that PCA eigen vectors aligns with axises.
+	  (with y-axis the longest dimension, x-axis the second longest, and z-axis the shortest)
+	*/
+	Matx44f estimatePose0() const;
 };
 
 /* The matrixs related with OpenGL rendering, a 3D point X is transformed to an image point x by: x=X'*mModeli*mModel*mView*mProjection
@@ -182,6 +206,7 @@ public:
 	cv::Mat  img;
 	cv::Mat1f  depth;
 	CVRMats    mats;
+	cv::Rect   outRect;
 public:
 	void getDepthRange(float &minDepth, float &maxDepth) const;
 
@@ -205,15 +230,19 @@ class _CVR_API CVRProjector
 	cv::Matx44f _mModelView;
 	cv::Matx44f _mProjection;
 	cv::Vec4i   _viewport;
+	
 	cv::Mat1f   _depth;
+	cv::Point2f _depthOffset;
 public:
 	CVRProjector();
 
-	CVRProjector(const CVRResult &rr);
+	CVRProjector(const CVRResult &rr, cv::Size viewSize=cv::Size(0,0));
 
 	CVRProjector(const CVRMats &mats, cv::Size viewSize);
 
 	CVRProjector(const cv::Matx44f &mModelView, const cv::Matx44f &mProjection, cv::Size viewSize);
+
+	CVRProjector(const cv::Matx44f &mModelView, const cv::Matx33f &cameraK, cv::Size viewSize, float nearP = 1.0f, float farP = 100.0f);
 
 	//project 3D point to 2D
 	cv::Point3f project(float x, float y, float z) const
@@ -464,14 +493,14 @@ public:
 
 	void setBgColor(float r, float g, float b, float a=1.0f);
 
-	CVRResult exec(CVRMats &mats, Size viewSize, int output=CVRM_IMAGE|CVRM_DEPTH, int flags=CVRM_DEFAULT, UserDraw *userDraw=NULL);
+	CVRResult exec(CVRMats &mats, Size viewSize, int output=CVRM_IMAGE|CVRM_DEPTH, int flags=CVRM_DEFAULT, UserDraw *userDraw=NULL, cv::Rect outRect=cv::Rect(0,0,0,0));
 
 	//facilitate user draw with lambda functions
 	template<typename _UserDrawOpT>
-	CVRResult exec(CVRMats &mats, Size viewSize, _UserDrawOpT &op, int output = CVRM_IMAGE | CVRM_DEPTH, int flags = CVRM_DEFAULT)
+	CVRResult exec(CVRMats &mats, Size viewSize, _UserDrawOpT &op, int output = CVRM_IMAGE | CVRM_DEPTH, int flags = CVRM_DEFAULT, cv::Rect outRect = cv::Rect(0, 0, 0, 0))
 	{
 		UserDrawX<_UserDrawOpT> userDraw(op);
-		return exec(mats, viewSize, output, flags, &userDraw);
+		return exec(mats, viewSize, output, flags, &userDraw, outRect);
 	}
 
 	//render with a temporary bg-image. The bg-image set by setBgImage will not be changed.
@@ -514,7 +543,7 @@ public:
 	void apply(Matx44f &mModel, Matx44f &mView, bool update=true);
 };
 
-
+#include<mutex>
 class _CVR_API CVRShowModelBase
 {
 public:
@@ -550,8 +579,11 @@ public:
 
 	CVRender	 render;
 	CVRTrackBall trackBall;
-
-	CVRResult    currentResult;
+	
+protected:
+	std::mutex   _resultMutex;
+	CVRResult    _currentResult;
+	bool         _hasResult = false;
 public:
 	CVRShowModelBase(const CVRModel &_model, Size _viewSize, const CVRMats &_mats, const cv::Mat &_bgImg, int _renderFlags)
 		:model(_model),viewSize(_viewSize),initMats(_mats),bgImg(_bgImg),renderFlags(_renderFlags)
@@ -567,6 +599,13 @@ public:
 	void update(bool waitDone=false);
 
 	virtual void showModel(const CVRModel &model);
+
+	//called by the bg-thread
+	void   setCurrentResult(const CVRResult &r);
+
+	//called in the main-thread
+	//return True if has result
+	bool   showCurrentResult(bool waitResult=false);
 
 	virtual void present(CVRResult &result) =0;
 };
@@ -600,25 +639,28 @@ public:
 void _CVR_API _postShowModelEvent(const _CVRShowModelEvent &evt);
 
 //============================================================================
+#ifndef CVRENDER_NO_GUI
+
 //show model in CVX windows (based on opencv windows)
 #include"CVX/gui.h"
 
-class CVXShowModel
-	:public CVRShowModelBase
-{
-public:
-	cv::CVWindow *wnd;
-public:
-	CVXShowModel(cv::CVWindow *_wnd, const CVRModel &_model, Size _viewSize, const CVRMats &_mats, const cv::Mat &_bgImg, int _renderFlags)
-		:wnd(_wnd), CVRShowModelBase(_model,_viewSize,_mats,_bgImg,_renderFlags)
-	{}
+ class CVXShowModel
+ 	:public CVRShowModelBase
+ {
+ public:
+ 	cv::CVWindow *wnd;
+ public:
+ 	CVXShowModel(cv::CVWindow *_wnd, const CVRModel &_model, Size _viewSize, const CVRMats &_mats, const cv::Mat &_bgImg, int _renderFlags)
+ 		:wnd(_wnd), CVRShowModelBase(_model,_viewSize,_mats,_bgImg,_renderFlags)
+ 	{}
 
-	virtual void present(CVRResult &result)
-	{
-		if (wnd && !result.img.empty())
-			wnd->show(result.img);
-	}
-};
+ 	virtual void present(CVRResult &result)
+ 	{
+ 		if (wnd && !result.img.empty())
+ 			wnd->show(result.img);
+ 	}
+ };
+
 
 typedef std::shared_ptr<CVXShowModel> CVXShowModelPtr;
 
@@ -640,13 +682,16 @@ typedef std::shared_ptr<CVXShowModel> CVXShowModelPtr;
 		dptr= CVXShowModelPtr(new CVXShowModel(wnd,model, viewSize, mats, bgImg, renderFlags));
 
 		wnd->setEventHandler([dptr](int evt, int param1, int param2, cv::CVEventData data) {
-			
+			//dptr->showCurrent();
 			_postShowModelEvent(_CVRShowModelEvent(dptr.get(), evt, param1, param2,data.ival,_CVRShowModelEvent::F_IGNORABLE));
 			
 		}, "cvxMDShowEventHandler");
 
-		dptr->update(false);
+		dptr->update(true);
+		//wait and show the first image
+		dptr->showCurrentResult(true);
 	}
 	return dptr;
 }
 
+#endif

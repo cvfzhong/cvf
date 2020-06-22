@@ -43,9 +43,9 @@ bool CVRModel::empty() const
 {
 	return !_model->scene;
 }
-void CVRModel::load(const std::string &file, int postProLevel)
+void CVRModel::load(const std::string &file, int postProLevel, const std::string &options)
 {
-	_model->load(file, postProLevel);
+	_model->load(file, postProLevel,options);
 }
 
 void CVRModel::saveAs(const std::string &file, const std::string &fmtID, const std::string &options)
@@ -53,15 +53,34 @@ void CVRModel::saveAs(const std::string &file, const std::string &fmtID, const s
 	_model->saveAs(file, fmtID, options);
 }
 
+Matx44f CVRModel::getUnitize(const cv::Vec3f &center, const cv::Vec3f &bbMin, const cv::Vec3f &bbMax)
+{
+	float tmp = 0;
+	for (int i = 0; i < 3; ++i)
+		tmp = __max(bbMax[i] - bbMin[i], tmp);
+	tmp = 2.f / tmp;
+
+	return cvrm::translate(-center[0], -center[1], -center[2]) * cvrm::scale(tmp, tmp, tmp);
+}
+
 Matx44f CVRModel::getUnitize() const
 {
-	return _model->getModeli();
+	if (!_model->scene)
+		return cvrm::I();
+
+	Vec3f bbMin, bbMax;
+	this->getBoundingBox(bbMin, bbMax);
+	return getUnitize(this->getCenter(), bbMin, bbMax);
 }
 
 cv::Vec3f CVRModel::getCenter() const
 {
 	auto &c = _model->scene_center;
 	return cv::Vec3f(c.x, c.y, c.z);
+}
+const std::vector<cv::Vec3f>& CVRModel::getVertices() const
+{
+	return _model->getVertices();
 }
 
 void    CVRModel::getBoundingBox(cv::Vec3f &cMin, cv::Vec3f &cMax) const
@@ -80,14 +99,19 @@ const std::string& CVRModel::getFile() const
 {
 	return _model->sceneFile;
 }
-Matx44f CVRModel::calcStdPose() const
+Matx44f CVRModel::estimatePose0() const
 {
 	return _model->calcStdPose();
 }
-void CVRModel::setTransformation(const Matx44f &trans)
+void CVRModel::setPose0(const Matx44f &trans)
 {
 	_model->setSceneTransformation(trans);
 }
+Matx44f CVRModel::getPose0() const
+{
+	return _model->_sceneTransform;
+}
+
 //======================================================
 
 CVRMats::CVRMats(const Matx44f &mInit)
@@ -165,34 +189,48 @@ CVRProjector::CVRProjector()
 {
 }
 
-CVRProjector::CVRProjector(const CVRResult &rr)
+CVRProjector::CVRProjector(const CVRResult &rr, cv::Size viewSize)
 {
 	auto &mats(rr.mats);
 	_mModelView = mats.mModeli*mats.mModel*mats.mView;
 	_mProjection = mats.mProjection;
 
-	Size sz = !rr.img.empty() ? rr.img.size() : rr.depth.size();
+	//viewSize must be specified if outRect is not the full image
+	CV_Assert(rr.outRect.x==0&&rr.outRect.y==0 || viewSize.width>0 && viewSize.height>0);
+
+	Size sz = viewSize.width>0&&viewSize.height>0? viewSize : !rr.img.empty() ? rr.img.size() : rr.depth.size();
 	CV_Assert(sz.width > 0 && sz.height > 0);
+	//CV_Assert(rr.outRect.size() == sz);
 
 	_viewport = cv::Vec4i(0, 0, sz.width, sz.height);
 	_depth = rr.depth;
+	_depthOffset = Point2f((float)rr.outRect.x, (float)rr.outRect.y);
 }
 CVRProjector::CVRProjector(const CVRMats &mats, cv::Size viewSize)
 {
 	_mModelView = mats.mModeli*mats.mModel*mats.mView;
 	_mProjection = mats.mProjection;
 	_viewport = cv::Vec4i(0, 0, viewSize.width, viewSize.height);
+	_depthOffset = Point2f(0, 0);
 }
 CVRProjector::CVRProjector(const cv::Matx44f &mModelView, const cv::Matx44f &mProjection, cv::Size viewSize)
 	:_mModelView(mModelView), _mProjection(mProjection), _viewport(0, 0, viewSize.width, viewSize.height)
 {
+	_depthOffset = Point2f(0, 0);
+}
+CVRProjector::CVRProjector(const cv::Matx44f &mModelView, const cv::Matx33f &cameraK, cv::Size viewSize, float nearP, float farP)
+	: _mModelView(mModelView), _mProjection(cvrm::fromK(cameraK, viewSize, nearP, farP)), _viewport(0, 0, viewSize.width, viewSize.height)
+{
+	_depthOffset = Point2f(0, 0);
 }
 
 cv::Point3f CVRProjector::unproject(float x, float y) const
 {
 	float z;
-	if (!cv::resampleBL<float>(reinterpret_cast<const Mat1f&>(_depth), z, x, y))
-		CV_Error(0, "depth map unavailable or (x,y) out of the range");
+	if (!cv::resampleBL<float>(reinterpret_cast<const Mat1f&>(_depth), z, x - _depthOffset.x, y - _depthOffset.y))
+		//CV_Error(0, "depth map unavailable or (x,y) out of the range");
+		z = 1.0f;
+
 	return unproject(x, y, z);
 }
 
@@ -300,8 +338,10 @@ public:
 			checkGLError();
 		}
 	}
-	CVRResult exec(const CVRMats &mats, Size viewSize, int output, int flags, CVRender::UserDraw *userDraw)
+	CVRResult exec(const CVRMats &mats, Size viewSize, int output, int flags, CVRender::UserDraw *userDraw, Rect outRect)
 	{
+		if(userDraw) printf("#001\n");
+
 		if (!_rendable) //return blank images
 			return CVRResult::blank(viewSize, mats);
 
@@ -323,7 +363,7 @@ public:
 		auto sceneModelView = mats.mModeli*mats.mModel*mats.mView;
 		//glMatrixMode(GL_MODELVIEW);
 		//glLoadMatrixf(mx.val);
-		
+		if(userDraw) printf("#002\n");
 #if 1
 		//_model->render(flags);
 		_rendable->render(sceneModelView, flags);
@@ -339,21 +379,34 @@ public:
 		glVertex3f(-0.5, 0.5, 0.);
 		glEnd();
 #endif
-
+		if(userDraw) printf("#003\n");
 		if (userDraw)
 			userDraw->draw();
 
 		CVRResult result;
 		result.mats = mats;
 
+		if (outRect.width == 0 && outRect.height == 0)
+			outRect = Rect(0, 0, renderWidth, renderHeight);
+		else
+			outRect = rectOverlapped(outRect, Rect(0, 0, renderWidth, renderHeight));
+		result.outRect = outRect;
+
+		if (outRect.width <= 0 || outRect.height <= 0)
+		{
+			printf("invalid outRect\n");
+			return result;
+		}	
+
 		glReadBuffer(GL_BACK);
 		glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
+		outRect.y = renderHeight - (outRect.y + outRect.height);
 		if (output&CVRM_IMAGE)
 		{
-			cv::Mat dimg(Size(renderWidth, renderHeight), CV_8UC3);
+			cv::Mat dimg(Size(outRect.width, outRect.height), CV_8UC3);
 			
-			glReadPixels(0, 0, renderWidth, renderHeight, GL_RGB, GL_UNSIGNED_BYTE, dimg.data);
+			glReadPixels(outRect.x, outRect.y, outRect.width, outRect.height, GL_RGB, GL_UNSIGNED_BYTE, dimg.data);
 
 			cvtColor(dimg, dimg, CV_BGR2RGB);
 			flip(dimg, dimg, 0);
@@ -362,16 +415,20 @@ public:
 
 		if (output&CVRM_DEPTH)
 		{
-			cv::Mat depth(Size(renderWidth, renderHeight), CV_32FC1);
+			cv::Mat depth(Size(outRect.width, outRect.height), CV_32FC1);
 
-			glReadPixels(0, 0, renderWidth, renderHeight, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data);
+			glReadPixels(outRect.x, outRect.y, outRect.width, outRect.height, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data);
 			flip(depth, depth, 0);
 			result.depth = depth;
 		}
 
-		//theDevice.postRedisplay();
-
 		checkGLError();
+
+		if(result.img.size()!=outRect.size())
+		{
+			printf("invalid result\n");
+			return result;
+		}
 
 		return result;
 	}
@@ -424,11 +481,11 @@ void CVRender::setBgColor(float r, float g, float b, float a)
 {
 	impl->_bgColor = Vec4f(r, g, b, a);
 }
-CVRResult CVRender::exec(CVRMats &mats, Size viewSize, int output, int flags, CVRender::UserDraw *userDraw)
+CVRResult CVRender::exec(CVRMats &mats, Size viewSize, int output, int flags, CVRender::UserDraw *userDraw, Rect outRect)
 {
 	CVRResult r;
 	cvrCall([&](int) {
-		r=impl->exec(mats, viewSize, output, flags, userDraw);
+		r=impl->exec(mats, viewSize, output, flags, userDraw, outRect);
 	});
 	return r;
 }
@@ -444,37 +501,37 @@ CVRResult CVRender::exec(CVRMats &mats, Size viewSize, int output, int flags, CV
 //{
 //	return impl->_modelx;
 //}
-
-_CVR_API void drawPoints2(const cv::Point3f pts[], int npts, float pointSize)
-{
-	glPointSize(pointSize);
-	glColor3f(1, 0, 0);
-	//glBegin(GL_POINTS);
-
-	glMatrixMode(GL_MODELVIEW);
-	double M[16];
-	glGetDoublev(GL_MODELVIEW_MATRIX, M);
-	for (int i = 0; i < npts; ++i)
-	{	//glVertex3f(pts[i].x, pts[i].y, pts[i].z);
-		glLoadMatrixd(M);
-		glTranslatef(pts[i].x, pts[i].y, pts[i].z);
-		glutSolidSphere(0.3, 30, 30);
-	}
-	//glEnd();
-}
-
-_CVR_API void drawPoints(const cv::Point3f pts[], int npts, float pointSize)
-{
-	glPointSize(pointSize);
-	glColor3f(1, 0, 0);
-	glBegin(GL_POINTS);
-
-	for (int i = 0; i < npts; ++i)
-	{	
-		glVertex3f(pts[i].x, pts[i].y, pts[i].z);
-	}
-	glEnd();
-}
+//
+//_CVR_API void drawPoints2(const cv::Point3f pts[], int npts, float pointSize)
+//{
+//	glPointSize(pointSize);
+//	glColor3f(1, 0, 0);
+//	//glBegin(GL_POINTS);
+//
+//	glMatrixMode(GL_MODELVIEW);
+//	double M[16];
+//	glGetDoublev(GL_MODELVIEW_MATRIX, M);
+//	for (int i = 0; i < npts; ++i)
+//	{	//glVertex3f(pts[i].x, pts[i].y, pts[i].z);
+//		glLoadMatrixd(M);
+//		glTranslatef(pts[i].x, pts[i].y, pts[i].z);
+//		glutSolidSphere(0.3, 30, 30);
+//	}
+//	//glEnd();
+//}
+//
+//_CVR_API void drawPoints(const cv::Point3f pts[], int npts, float pointSize)
+//{
+//	glPointSize(pointSize);
+//	glColor3f(1, 0, 0);
+//	glBegin(GL_POINTS);
+//
+//	for (int i = 0; i < npts; ++i)
+//	{	
+//		glVertex3f(pts[i].x, pts[i].y, pts[i].z);
+//	}
+//	glEnd();
+//}
 
 CVRShowModelBase::ResultFilter::~ResultFilter()
 {}
@@ -504,6 +561,36 @@ void CVRShowModelBase::showModel(const CVRModel &model)
 	this->update(false);
 }
 
+void   CVRShowModelBase::setCurrentResult(const CVRResult &r)
+{
+	std::lock_guard<std::mutex> lock(this->_resultMutex);
+	_currentResult = r;
+	_hasResult = true;
+}
+
+bool   CVRShowModelBase::showCurrentResult(bool waitResult)
+{
+	if (!_hasResult)
+	{
+		if(!waitResult)
+			return false;
+		else
+		{
+			while(!_hasResult)
+				std::this_thread::sleep_for(std::chrono::milliseconds(3));
+		}
+	}
+
+	CVRResult r;
+	{
+		std::lock_guard<std::mutex> lock(this->_resultMutex);
+		r = _currentResult;
+		_hasResult = false;
+	}
+	this->present(r);
+	return true;
+}
+
 CVRShowModelBase::~CVRShowModelBase()
 {}
 
@@ -518,7 +605,9 @@ void proShowModelEvents(const _CVRShowModelEvent &evt, int nLeft)
 
 		if (!wd->model)
 		{
-			wd->currentResult = CVRResult::blank(wd->viewSize, wd->initMats);
+			wd->setCurrentResult(
+				 CVRResult::blank(wd->viewSize, wd->initMats)
+			);
 			return;
 		}
 
@@ -529,7 +618,7 @@ void proShowModelEvents(const _CVRShowModelEvent &evt, int nLeft)
 				wd->render.setBgImage(wd->bgImg);
 		}
 
-		time_t beg = clock();
+		//time_t beg = clock();
 
 		auto &tb(evt.winData->trackBall);
 
@@ -544,9 +633,10 @@ void proShowModelEvents(const _CVRShowModelEvent &evt, int nLeft)
 		tb.apply(mats.mModel, mats.mView, true);
 
 		{
-			wd->currentResult = wd->render.exec(mats, wd->viewSize, CVRM_IMAGE | CVRM_DEPTH, wd->renderFlags, wd->userDraw.get());
+			auto r = wd->render.exec(mats, wd->viewSize, CVRM_IMAGE | CVRM_DEPTH, wd->renderFlags, wd->userDraw.get());
+			wd->setCurrentResult(r);
 		}
-		postShowImage(wd);
+		//postShowImage(wd);
 	}
 }
 
@@ -561,6 +651,8 @@ void _CVR_API _postShowModelEvent(const _CVRShowModelEvent &evt)
 		|| evt.code == cv::EVENT_MOUSEWHEEL || evt.code == cv::EVENT_KEYBOARD
 		)
 	{
+		evt.winData->showCurrentResult();
+
 		cvrPost([evt](int nLeft) {
 			proShowModelEvents(evt, nLeft);
 		}, false);

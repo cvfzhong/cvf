@@ -24,5 +24,6 @@
 #include"CVX/src.cpp"
 
 //#include"glInfo.cpp"
+//#include"BFCS/log.cpp"
 
    

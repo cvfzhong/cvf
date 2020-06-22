@@ -1,15 +1,16 @@
 
-#include<Windows.h>
-#include <WinNetWk.h>
+//#include<Windows.h>
+//#include <WinNetWk.h>
 
 #include"EDK/cmds.h"
 #include"BFC/portable.h"
 #include"BFC/stdf.h"
+#include"BFC/err.h"
 #include<fstream>
 #include<time.h>
 using namespace std;
 using namespace ff;
-
+#include"appstd.h"
 
 _CMDI_BEG
 
@@ -38,7 +39,7 @@ Mat1b getRenderMask(const Mat1f &depth, float eps=1e-6f)
 }
 
 template<typename _ValT, int cn, typename _AlphaValT>
-inline void alphaBlendX(const Mat_<Vec<_ValT, cn> > &F, const Mat_<_AlphaValT> &alpha, double alphaScale, Mat_<Vec<_ValT, cn> > &B)
+inline void alphaBlendX(const Mat_<Vec<_ValT, cn> > &F, const Mat_<_AlphaValT> &alpha, double alphaScale, Mat_<Vec<_ValT, cn> > B)
 {
 	for_each_4(DWHNC(F), DN1(alpha), DNC(B), DNC(B), [alphaScale](const _ValT *f, _AlphaValT a, const _ValT *b, _ValT *c) {
 		double w = a * alphaScale;
@@ -60,6 +61,40 @@ Rect randBox(Size imgSize, int minSize, int maxSize)
 		{
 			b = Rect(cx - r, cy - r, r * 2, r * 2);
 			break;
+		}
+	}
+	return b;
+}
+Rect randBox(Size imgSize, int minSize, int maxSize, const Mat1i &dmask, double maxOverlapp=0.2, int maxTry=10)
+{
+	maxSize = __min(int(__min(imgSize.width, imgSize.height)*0.8), maxSize);
+	Rect b;
+	double mr = 10;
+	int n = 0;
+	while (true)
+	{
+		int r = minSize + rand() % (maxSize - minSize);
+		r /= 2;
+		int cx = rand() % imgSize.width, cy = rand() % imgSize.height;
+		if (cx - r >= 0 && cy - r >= 0 && cx + r < imgSize.width && cy + r < imgSize.height)
+		{
+			Rect bx = Rect(cx - r, cy - r, r * 2, r * 2);
+
+			int nMasked = 0;
+			for_each_1(DWHN1r(dmask, bx), [&nMasked](int &mi) {
+				if (mi >= 0)
+					++nMasked;
+			});
+
+			double r = double(nMasked) / (bx.width*bx.height);
+			if (r < mr)
+			{
+				mr = r;
+				b = bx;
+			}
+			++n;
+			if(r< maxOverlapp || n>maxTry)
+				break;
 		}
 	}
 	return b;
@@ -118,7 +153,7 @@ void transformF(Mat3b &F, const Mat1b &mask, const Mat3b &B, double saturationR=
 	cvtColor(Fx, F, CV_HSV2BGR);
 }
 
-Rect composite(Mat3b F, Mat1b mask, Mat3b &B, Rect roi, float maxSmoothSigma=1.0f, float maxNoiseStd=5.0f)
+Rect composite(Mat3b F, Mat1b mask, Mat3b B, Rect roi, float maxSmoothSigma=1.0f, float maxNoiseStd=5.0f)
 {
 	Mat1f fmask;
 	mask.convertTo(fmask, CV_32F, 1.0 / 255);
@@ -616,6 +651,210 @@ public:
 };
 
 REGISTER_CLASS(RenderVOC)
+
+void _loadModelFiles(const std::string &listFile, std::vector<std::string> &modelNames, std::vector<std::string> &modelFiles)
+{
+	std::string dir = ff::GetDirectory(listFile);
+	std::ifstream is(listFile);
+	if (!is)
+		FF_EXCEPTION1("file open failed");
+	
+	modelNames.clear();
+	modelFiles.clear();
+	std::string name, file;
+	while (is >> name >> file)
+	{
+		modelNames.push_back(name);
+		modelFiles.push_back(ff::CatDirectory(dir, file));
+	}
+}
+
+static void renderVOCImages(const std::string &listFile, const std::string &tarDataDir, int nImages, int minObjsPerImage, int maxObjsPerImage)
+{
+	srand((int)time(NULL));
+
+	//dataDir = D_DATA + "/re3d/3ds-model/";
+
+	std::vector<std::string> modelNames;
+	std::vector<std::string> modelFiles;
+	_loadModelFiles(listFile, modelNames, modelFiles);
+
+	
+
+	std::vector<std::string> bgImageList = {
+		R"(/fan/store/datasets/flickr30k_images/list.txt)",
+		R"(/fan/store/datasets/seg_dataset/ADE20K_2016_07_26/images/list.txt)"
+	};
+
+	std::vector<std::string>  bgImageFiles;
+	loadImageList(bgImageList, bgImageFiles);
+
+	std::vector<CVRModel>  models(modelFiles.size());
+	std::vector<CVRender>  renders(modelFiles.size());
+	for (size_t i = 0; i < modelFiles.size(); ++i)
+	{
+		printf("%d: loading %s\n", i+1, modelFiles[i].c_str());
+		models[i].load(modelFiles[i]);
+		renders[i] = CVRender(models[i]);
+	}
+
+	//rotation vectors
+	std::vector<Vec3f>  vdirs;
+	cvrm::sampleSphere(vdirs, 1000);
+
+	std::vector<int>  modelIndex;
+	for (int i = 0; i < (int)models.size(); ++i)
+		modelIndex.push_back(i);
+	if (models.size() < maxObjsPerImage)
+		maxObjsPerImage = (int)models.size();
+
+	Annotations annot("Re3D", "Re3D", "VOC 2007", "rendered");
+
+	std::string dpath = tarDataDir;
+	annot.setDPath(dpath, true);
+
+	saveLabelMap(dpath + "labelmap.txt", modelNames);
+
+	{
+		std::ofstream os(tarDataDir + "/label_list.txt");
+		if (!os)
+			FF_EXCEPTION1("can't open label_list file");
+
+		for (auto &label : modelNames)
+			os << label << endl;
+	}
+
+	for (int n = 0; n < nImages;)
+	{
+		Mat bgImg = imread(bgImageFiles[rand() % bgImageFiles.size()]);
+		if (bgImg.empty())
+			continue;
+		else
+			++n;
+
+		double scale = 800.0 / __max(bgImg.rows, bgImg.cols);
+		Size dsize(int(bgImg.cols*scale), int(bgImg.rows*scale));
+		resize(bgImg, bgImg, dsize);
+
+		std::random_shuffle(modelIndex.begin(), modelIndex.end());
+		int nModels = rand() % (maxObjsPerImage-minObjsPerImage+1) + minObjsPerImage;
+
+		Mat3b dimg = bgImg.clone();
+		Mat1i dmask(bgImg.size());
+		setMem(dmask, 0xFF);
+
+		std::vector<DObject> objs;
+		for (int i = 0; i < nModels; ++i)
+		{
+			int mi = modelIndex[i];
+			CVRModel &modeli = models[mi];
+			CVRender &renderi = renders[mi];
+
+			Rect bb = randBox(bgImg.size(), 100, 400, dmask);
+			Size bbSize(bb.width, bb.height);
+
+			CVRMats mats(modeli, bbSize);
+			mats.mModel = cvrm::rotate(Vec3f(0, 0, 1), vdirs[rand() % vdirs.size()]);
+
+			CVRResult r = renderi.exec(mats, bbSize);
+			if (r.img.size() != bbSize)
+			{
+				printf("Error: render failed\n");
+				continue;
+			}
+			Mat1b mask = getRenderMask(r.depth);
+
+			Rect imgROI = rectOverlapped(bb, Rect(0, 0, dimg.cols, dimg.rows));
+			if (imgROI.width <= 0 || imgROI.height <= 0)
+				continue;
+			Rect objROI = Rect(imgROI.x - bb.x, imgROI.y - bb.y, imgROI.width, imgROI.height);
+			for_each_2(DWHN1r(dmask, imgROI), DN1r(mask, objROI), [mi](int &i, uchar m) {
+				if (m)
+					i = mi;
+			});
+			if(imgROI!=bb)
+			{
+				printf("invalid bb\n");
+			}
+
+			bb = composite(r.img, mask, dimg, bb);
+			//cv::rectangle(dimg, bb, Scalar(0, 255, 255), 2);
+
+			DObject obj;
+			obj.objID = mi;
+			obj.name = modelNames[mi];
+			obj.boundingBox = bb;
+			objs.push_back(obj);
+		}
+
+		std::string fileBaseName = ff::StrFormat("%05d", n);
+		annot.save(fileBaseName, dimg, objs);
+
+		printf("%s, nm=%d\n", fileBaseName.c_str(), nModels);
+
+		//imshow("img", dimg);
+		//waitKey();
+	}
+}
+void genVOCList(std::string dataDir, int nVal)
+{
+	//dataDir = R"(Z:\local\data\Re3D\Re3Db\)";
+
+	std::string imgDir = "JPEGImages", xmlDir = "Annotations";
+
+	std::vector<string> files;
+	ff::listFiles(dataDir + "/" + imgDir, files);
+
+	auto saveList = [imgDir, xmlDir](const string vfiles[], int count, std::string listFile) {
+		FILE *fp = fopen(listFile.c_str(), "w");
+		if (!fp)
+			throw listFile;
+
+		for (int i = 0; i < count; ++i)
+		{
+			std::string baseName = ff::GetFileName(vfiles[i], false);
+			fprintf(fp, "%s %s\n", (imgDir + "/" + vfiles[i]).c_str(), (xmlDir + "/" + baseName + ".xml").c_str());
+		}
+
+		fclose(fp);
+	};
+
+	auto createTestNameSize = [dataDir, imgDir](const string vfiles[], int count, string dfile) {
+		FILE *fp = fopen(dfile.c_str(), "w");
+		if (!fp)
+			throw dfile;
+
+		string dir = dataDir + imgDir + "/";
+		for (int i = 0; i < count; ++i)
+		{
+			Mat img = imread(dir + vfiles[i]);
+			fprintf(fp, "%s %d %d\n", ff::GetFileName(vfiles[i], false).c_str(), img.rows, img.cols);
+		}
+		fclose(fp);
+	};
+
+	//int ntest = int(files.size() * ratioOfTestImages);
+	saveList(&files[0], nVal, dataDir + "val.txt");
+	createTestNameSize(&files[0], nVal, dataDir + "test_name_size.txt");
+	saveList(&files[nVal], files.size() - nVal, dataDir + "train.txt");
+}
+
+
+void on_renderVOC()
+{
+	//connectNetDrive("\\\\101.76.215.159\\f", "Z:", "fan", "fan123");
+
+	std::string listFile = R"(/fan/SDUicloudCache/re3d/re3d25.txt)";
+	std::string tarDataDir = R"(/fan/local/paddle/PaddleDetection/dataset/re3d25d/)";
+	int nImages = 1000, nVal=200;
+
+	renderVOCImages(listFile, tarDataDir, nImages, 24, 25);
+	genVOCList(tarDataDir, nVal);
+}
+
+CMD_BEG()
+CMD("renderVOC", on_renderVOC, "render VOC dataset", "", "")
+CMD_END()
 
 _CMDI_END
 

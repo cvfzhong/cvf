@@ -1,6 +1,7 @@
 
 #include"EDK/cmds.h"
 #include"BFC/stdf.h"
+#include<iostream>
 
 _CMDI_BEG
 
@@ -13,19 +14,28 @@ public:
 		std::string file = R"(F:\dev\prj-c1\1100-Re3DX\TestRe3DX\3ds\plane.3ds)";
 
 		//std::string file = R"(F:\SDUicloudCache\re3d\3ds-model\plane\plane.3ds)";
+
+		CVRModel model;
 		
-		CVRModel model(file);
+#if 0
+		model.load(file, 3, "-extFile -");
 		Matx44f m = model.calcStdPose();
 		m = m*cvrm::rotate(CV_PI, Vec3f(1, 0, 0));
 
-		//model.setTransformation(m);
-
-		//model.saveAs(file);
+		model.setTransformation(m);
+		std::string xfile = ff::ReplacePathElem(file, "yml", ff::RPE_FILE_EXTENTION);
+		{
+			cv::FileStorage xfs(xfile, FileStorage::WRITE);
+			xfs << "pose0" << cv::Mat(m);
+		}
+#else
+		model.load(file);
+#endif
 
 		mdshow("model", model);
 		cv::cvxWaitKey();
 	}
-	virtual void exec1(std::string dataDir, std::string args)
+	virtual void exec2(std::string dataDir, std::string args)
 	{
 		printf("Please drag-and-drop 3D model files to the main window.\n");
 

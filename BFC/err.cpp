@@ -10,6 +10,9 @@
 #include"BFC/cfg.h"
 #include"BFC/portable.h"
 
+#ifdef _MSC_VER
+#include<intrin.h>
+#endif
 
 _FF_BEG
 
@@ -83,23 +86,16 @@ _FFS_API void  DefaultErrorHandler(int type, const char *err,const char *msg,con
 		break;
 	case ERROR_CLASS_PROGRAM_ERROR:
 		{
-//#if _IS_WINDOWS()
-//
-//#ifdef _DEBUG
-//			_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_WNDW );
-//			
-//			if(_CrtDbgReport(_CRT_ERROR,file,line,NULL,msg)==1)
-//				__debugbreak(); //retry.
-//#else
-//			DefaultErrorHandler(ERROR_CLASS_EXCEPTION,err,msg,file,line);
-//#endif
-//
-//#endif
-			DefaultErrorHandler(ERROR_CLASS_EXCEPTION, err, msg, file, line);
+		printf("assert failed: expr=\"%s\"\n", msg);
+#ifdef _MSC_VER
+			__debugbreak(); //retry.
+#else
+		throw CSException(err, msg);
+#endif
 		}
 		break;
 	case ERROR_CLASS_WARNING:
-		//OutputDebugString("\n\nWARNING:%s\n\n",err);
+		printf("program warning: err=%s, msg=%s\n", err? err : "null", msg? msg : "null");
 		break;
 	}
 }
@@ -124,7 +120,7 @@ _FF_END
 
 using namespace ff;
 
-_FFS_API void  _FF_HandleError(int type, const char *err,const char *msg,const char* file,int line)
+_FFS_API void  _FF_HandleError(int type, const char *err,const std::string &msg,const char* file,int line)
 {	
 //#if _IS_WINDOWS()
 //	ff::AutoArrayPtr<char> buf;
@@ -146,14 +142,14 @@ _FFS_API void  _FF_HandleError(int type, const char *err,const char *msg,const c
 //	OutputDebugStringA(StrFormat("%s(%d) : %s",file,line,msg.c_str()).c_str());
 //	OutputDebugStringA("\n***************\n");
 
-	_FF_NS(g_errorHandler)(type,err,msg,file,line);
+	_FF_NS(g_errorHandler)(type,err,msg.c_str(),file,line);
 }
 
-_FFS_API void  _FF_HandleError(int type, const char *err,const wchar_t *msg,const char* file,int line)
+_FFS_API void  _FF_HandleError(int type, const char *err,const std::wstring &msg,const char* file,int line)
 {
 	std::string amsg(X2MBS(msg));
 	
-	_FF_HandleError(type,err,amsg.c_str(),file,line);
+	_FF_HandleError(type,err,amsg,file,line);
 }
 
 _FFS_API   const char *ERR_GENERIC ="ERROR";

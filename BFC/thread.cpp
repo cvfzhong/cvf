@@ -42,6 +42,8 @@ public:
 		{
 #ifdef _WIN32
 			ok=::SetThreadPriority((HANDLE)threadPtr->native_handle(), priority)==TRUE;
+#else
+			ok=true;
 #endif
 		}
 		return ok;
@@ -117,7 +119,7 @@ void Thread::CImpl::_threadProc()
 			if (toBeExit)
 				break;
 			else
-				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
 		else
 		{

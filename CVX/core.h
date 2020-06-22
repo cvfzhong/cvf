@@ -521,6 +521,28 @@ inline Point2f transA(const Point_<_T1> &pt, const _AValT *A)
 	return transA(pt.x, pt.y, A);
 };
 
+//============================================================================
+//2D affine utils
+template<typename _Tp>
+inline Matx<_Tp, 2, 3> operator*(const Matx<_Tp, 2, 3> &am, const Matx<_Tp, 2, 3> &bm)
+{
+	const _Tp *a = am.val, *b = bm.val;
+	return Matx<_Tp, 2, 3>(
+		a[0] * b[0] + a[1] * b[3], a[0] * b[1] + a[1] * b[4], a[0] * b[2] + a[1] * b[5] + a[2],
+		a[3] * b[0] + a[4] * b[3], a[3] * b[1] + a[4] * b[4], a[3] * b[2] + a[4] * b[5] + a[5]
+		);
+}
+template<typename _Tp>
+inline Matx<_Tp, 2, 3> invertAffine(const Matx<_Tp, 2, 3> &am)
+{
+	const _Tp *a = am.val;
+	auto m = Matx<_Tp, 2, 2>(a[0], a[1], a[3], a[4]).inv();
+	Vec<_Tp, 2> v = m*Vec<_Tp, 2>(-a[2], -a[5]);
+	return Matx<_Tp, 2, 3>(m.val[0], m.val[1], v[0], m.val[2], m.val[3], v[1]);
+}
+
+
+
 
 _CVX_END
 

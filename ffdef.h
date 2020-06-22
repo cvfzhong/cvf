@@ -111,3 +111,41 @@ typedef int		int32;
 _FF_BEG
 	using ::uchar;
 _FF_END
+
+#ifndef DEVX
+
+	#if !defined(FF_NDEV)
+		#define DEVX(...)  __VA_ARGS__
+	#else
+		#define DEVX(...)
+
+		#ifndef FF_NDEBUG
+		#define FF_NDEBUG
+		#endif
+	#endif
+
+#endif
+
+#ifndef DEVX0 //just for facilitate comment/uncomment to the DEVX blocks
+#define DEVX0(...)
+#endif
+
+#ifndef DEVX1
+#define DEVX1(...) __VA_ARGS__
+#endif
+
+#ifndef DEVLog
+#define DEVLog(...) DEVX(LOG[CDev](__VA_ARGS__))
+#endif
+#ifndef DEVLog1
+#define DEVLog1(...) LOG[CDev](__VA_ARGS__)
+#endif
+
+
+#ifndef DEVimshow
+#define DEVimshow(...) DEVX(cv::imshow(__VA_ARGS__))
+#endif
+#ifndef DEVimshow1
+#define DEVimshow1(...) cv::imshow(__VA_ARGS__)
+#endif
+

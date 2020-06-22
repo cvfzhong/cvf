@@ -122,6 +122,8 @@ public:
 	}
 	
 	void Close();
+
+	void Clear();
 	
 	operator bool() const
 	{

@@ -4,6 +4,7 @@
 
 #include<exception>
 #include<assert.h>
+#include<string>
 
 #include"ffdef.h"
 
@@ -76,15 +77,17 @@ enum
 	ERROR_CLASS_PROGRAM_ERROR
 };
 
-_FFS_API void  _FF_HandleError(int type, const char *err,const char *msg,const char* file,int line);
+_FFS_API void  _FF_HandleError(int type, const char *err,const std::string &msg,const char* file,int line);
 
-_FFS_API void  _FF_HandleError(int type, const char *err,const wchar_t *msg,const char* file,int line);
+_FFS_API void  _FF_HandleError(int type, const char *err,const std::wstring &msg,const char* file,int line);
 
 #define _FF_HANDLE_ERROR(type,err,msg)  _FF_HandleError(type,err,msg,__FILE__,__LINE__)
 
 #define FF_WARNING(err,msg) _FF_HANDLE_ERROR(ERROR_CLASS_WARNING,err,msg)
 
 #define FF_EXCEPTION(err,msg)  _FF_HANDLE_ERROR(ERROR_CLASS_EXCEPTION,err,msg)
+
+#define FF_EXCEPTION1(msg)  FF_EXCEPTION(ERR_GENERIC,msg)
 
 #define FF_ERROR(err, msg)  _FF_HANDLE_ERROR(ERROR_CLASS_PROGRAM_ERROR,err,msg)
 
@@ -113,13 +116,10 @@ inline _ValT* _ff_verify_func(_ValT *ptr, const char *statement, const char* fil
 #define verify(value)  _ff_verify_func((value),#value,__FILE__,__LINE__)
 
 
-#ifdef _FF_ASSERT
+#define FFAssert1(expr)  if(!(expr)) { _FF_HandleError(ERROR_CLASS_PROGRAM_ERROR,ERR_ASSERT_FAILED,#expr,__FILE__,__LINE__); }
 
-#undef assert
-
-#define assert(value)  if(!(value)) { _FF_HandleError(ERROR_CLASS_EXCEPTION,ERR_ASSERT_FAILED,#value,__FILE__,__LINE__); }
-
-#endif
+#define FFAssert(expr)  DEVX(FFAssert1(expr))
+#define DEVAssert(expr) FFAssert(expr)
 
 #endif
 
