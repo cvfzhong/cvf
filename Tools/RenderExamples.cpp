@@ -8,7 +8,7 @@ class RenderExamples
 {
 public:
 	//load and show model
-	virtual void exec1(std::string dataDir, std::string args)
+	virtual void exec(std::string dataDir, std::string args)
 	{
 		mdshow("model1", CVRModel(dataDir + "/3d/box1.3ds"));
 
@@ -185,7 +185,7 @@ public:
 	{
 		
 	}
-	virtual void exec(std::string dataDir, std::string args)
+	virtual void exec8(std::string dataDir, std::string args)
 	{
 		renderToVideo(dataDir, args);
 	}

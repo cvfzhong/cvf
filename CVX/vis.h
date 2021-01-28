@@ -57,6 +57,23 @@ inline Mat visf(const Mat &img, double maxVal = -1.0)
 	return dimg;
 }
 
+inline void genColorTable(Vec3b *vcolor, int size, bool shuffle=true)
+{
+	double d = 255.0 / pow(double(size), 1.0 / 3);
+
+	int i = 0;
+	for(double b=255.0; b>=0.0; b-=d)
+		for(double g=255.0; g>=0.0; g-=d)
+			for (double r = 255.0; r >= 0.0; r -= d)
+			{
+				vcolor[i++] = Vec3b(uchar(b), uchar(g), uchar(r));
+				if (i >= size)
+					goto _BREAK;
+			}
+_BREAK:
+	if(shuffle)
+		std::random_shuffle(vcolor, vcolor + size);
+}
 
 template<typename _IndexPtrT>
 inline void _vis_index(cv::Mat &cimg, _IndexPtrT cc, int width, int height, int cstride, int color_table_size, const uchar *vcolor = NULL)
@@ -65,11 +82,9 @@ inline void _vis_index(cv::Mat &cimg, _IndexPtrT cc, int width, int height, int 
 
 	if (!vcolor)
 	{
+		static_assert(sizeof(Vec3b) == sizeof(uchar) * 3, "");
 		_vcolor = new uchar[color_table_size * 3];
-		for (int i = 0; i < color_table_size * 3; ++i)
-		{
-			_vcolor[i] = uchar(rand());
-		}
+		genColorTable((Vec3b*)_vcolor, color_table_size);
 		vcolor = _vcolor;
 	}
 

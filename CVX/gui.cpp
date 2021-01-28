@@ -583,6 +583,9 @@ public:
 	}
 	void updateTitle()
 	{
+		if (!this->showRichTitle)
+			return;
+
 		std::string frameName = ff::X2MBS(imgSet->frameName((int)framePos));
 		char pos[1024], buf[1024];
 		std::string head(_WND_LEADING_CHAR + name + (!isName.empty() ? ":" + isName : ""));

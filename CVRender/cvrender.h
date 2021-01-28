@@ -104,6 +104,32 @@ public:
 	virtual ~CVRRendable();
 };
 
+class _CVR_API CVRMesh
+{
+public:
+	std::vector<char>           verticesMask;
+	std::vector<cv::Vec3f>		vertices;
+	std::vector<cv::Vec3f>      normals;
+
+	struct Faces
+	{
+		int  numVertices;
+		std::vector<int>   indices;
+	};
+
+	std::vector<Faces>		faces;
+	std::vector<std::string>   texFiles;
+public:
+	void clear()
+	{
+		verticesMask.clear();
+		vertices.clear();
+		normals.clear();
+		faces.clear();
+		texFiles.clear();
+	}
+};
+
 struct _CVRModel;
 
 class _CVR_API CVRModel
@@ -149,6 +175,8 @@ public:
 	cv::Vec3f getCenter() const;
 
 	const std::vector<cv::Vec3f>& getVertices() const;
+
+	void  getMesh(CVRMesh &mesh, int flags = 0);
 
 	void    getBoundingBox(cv::Vec3f &cMin, cv::Vec3f &cMax) const;
 

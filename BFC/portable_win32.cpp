@@ -375,7 +375,7 @@ _BFC_API void connectNetDrive(const std::string &remotePath, const std::string &
 	net_Resource.dwScope = RESOURCE_CONNECTED;
 	net_Resource.dwType = RESOURCETYPE_ANY;
 	net_Resource.dwUsage = 0;
-	net_Resource.lpComment = "";
+	net_Resource.lpComment = (LPSTR)"";
 	net_Resource.lpLocalName = (LPSTR)localName.c_str();  //映射成本地驱动器Z:
 	net_Resource.lpProvider = NULL;
 	net_Resource.lpRemoteName = (LPSTR)remotePath.c_str(); // \\servername\共享资源名

@@ -9,7 +9,7 @@ class ShowModels
 	:public ICommand
 {  
 public: 
-	virtual void exec(std::string dataDir, std::string args)
+	virtual void exec1(std::string dataDir, std::string args)
 	{
 		std::string file = R"(F:\dev\prj-c1\1100-Re3DX\TestRe3DX\3ds\plane.3ds)";
 
@@ -35,7 +35,7 @@ public:
 		mdshow("model", model);
 		cv::cvxWaitKey();
 	}
-	virtual void exec2(std::string dataDir, std::string args)
+	virtual void exec(std::string dataDir, std::string args)
 	{
 		printf("Please drag-and-drop 3D model files to the main window.\n");
 

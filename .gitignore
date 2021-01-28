@@ -11,6 +11,8 @@
 *.lib
 *.exe
 *.dll
+*.so*
+*.o*
 
 *.props
 
@@ -36,7 +38,7 @@ build/
 bld/
 [Bb]in/
 [Oo]bj/
-/.vscode/
+*.vscode*
 
 # Roslyn cache directories
 *.ide/

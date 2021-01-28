@@ -262,6 +262,8 @@ _CVX_API bool saveMatData(const string_t &file, const cv::Mat &mat);
 
 _CVX_API cv::Mat loadMatData(const string_t &file);
 
+_CVX_API void saveAndCopy(ImageSetPtr is, int gifDelayTime);
+
 class _CVX_API CVWindow
 {
 protected:
@@ -314,6 +316,7 @@ public:
 	int gifDelayTime = 50;
 	bool numKeySwitch = true;
 	bool echoPixel = true;
+	bool showRichTitle = true;
 public:
 	template<typename _OpT>
 	void setEventHandler(const _OpT &op, const std::string &name="")

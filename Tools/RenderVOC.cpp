@@ -333,324 +333,324 @@ R"(item {
 		fprintf(fp, fmt, s.c_str(), ++id, s.c_str());
 	fclose(fp);
 }
-
-class RenderVOC
-	:public ICommand
-{
-public:
-	virtual void exec0(std::string dataDir, std::string args)
-	{
-		dataDir = D_DATA + "/re3d/3ds-model/";
-
-		std::vector<std::string> modelFiles = { "bottle2","plane","Sedan","car1","cup1"};
-		for (auto &f : modelFiles)
-			f = dataDir + f + "/" + f + ".3ds";
-
-		std::vector<std::string> bgImageList = {
-			R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\list.txt)",
-			R"(F:\dataset\flickr30k_images\list.txt)"
-		};
-
-		std::vector<std::string>  bgImageFiles;
-		loadImageList(bgImageList, bgImageFiles);
-
-		std::vector<CVRModel>  models(modelFiles.size());
-		//std::vector<CVRender>  renders(modelFiles.size());
-		for (size_t i = 0; i < modelFiles.size(); ++i)
-		{
-			models[i].load(modelFiles[i]);
-			//renders[i] = CVRender(models[i]);
-		}
-
-		std::vector<int>  modelIndex;
-		for (int i = 0; i < (int)models.size(); ++i)
-			modelIndex.push_back(i);
-
-		int N = 100;
-		for (int n = 0; n < N;)
-		{
-			Mat bgImg = imread(bgImageFiles[rand() % bgImageFiles.size()]);
-			if (bgImg.empty())
-				continue;
-			else
-				++n;
-
-			double scale = 800.0/__max(bgImg.rows, bgImg.cols);
-			Size dsize(int(bgImg.cols*scale), int(bgImg.rows*scale));
-			resize(bgImg, bgImg, dsize);
-
-			std::random_shuffle(modelIndex.begin(), modelIndex.end());
-			int nModels = rand() % (int)modelIndex.size()+1;
-
-			const float eyeZ = 4.0f;
-			CVRMats mats(bgImg.size(), 1.5, eyeZ);
-
-			CVRProjector prj(mats.mView, mats.mProjection, bgImg.size());
-
-			CVRModelArray scene(nModels);
-			for (int i = 0; i < nModels; ++i)
-			{
-				scene[i].model = models[modelIndex[i]];
-				scene[i].mModeli = scene[i].model.getUnitize();
-
-				Rect bb = randBox(bgImg.size(), 100, 400);
-
-				Point3f C=prj.unproject(bb.x + bb.width / 2, bb.y + bb.height / 2, 0.5);
-				Point3f L = prj.unproject(bb.x, bb.y + bb.height / 2, 0.5);
-				Point3f R = prj.unproject(bb.x + bb.width, bb.y + bb.height / 2, 0.5);
-				double scale = norm(L - R) / 2.0;
-				double angle = rand() / 1000.0;
-				scene[i].mModel = cvrm::scale(scale, scale, scale)*cvrm::rotate(angle, Vec3f(1, 0, 0))*cvrm::translate(C.x, C.y, C.z);
-
-				cv::rectangle(bgImg, bb, Scalar(0, 255, 255), 2);
-			}
-
-
-			CVRender render(scene);
-			
-			render.setBgImage(bgImg);
-			auto r=render.exec(mats, bgImg.size());
-/*
-			Mat curImg = bgImg.clone();
-			for (int i = 0; i < nModels; ++i)
-			{
-				CVRModel &modeli = models[modelIndex[i]];
-				CVRender &renderi = renders[modelIndex[i]];
-
-				CVRMats mats(modeli,bgImg.size());
-				renderi.setBgImage(curImg);
-				CVRResult r=renderi.exec(mats, bgImg.size());
-				curImg = r.img;
-			}*/
-			imshow("img", r.img);
-			waitKey();
-		}
-	}
-
-	virtual void exec_test_annot(std::string dataDir, std::string args)
-	{
-		//connectNetDrive("\\\\101.76.215.117\\f", "Z:", "fan", "fan123");
-
-		Annotations annot("Re3D","Re3D","VOC 2007","rendered");
-
-		std::vector<std::string> bgImageList = {
-			R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\list.txt)",
-		};
-
-		std::vector<std::string>  bgImageFiles;
-		loadImageList(bgImageList, bgImageFiles);
-
-		std::string file = bgImageFiles.front();
-		Mat img = imread(file);
-
-		DObject obj;
-		obj.objID = 1;
-		obj.name = "test";
-		obj.boundingBox = Rect(2, 3, 100, 200);
-		std::vector<DObject> objs;
-		objs.push_back(obj);
-		objs.push_back(obj);
-
-		std::string dpath = R"(Z:/local/data/Re3D/Re3Da/)";
-		
-		annot.setDPath(dpath);
-
-		//annot.saveXML("./voc.xml", file, img, objs);
-		annot.save("001", img, objs);
-
-		std::vector<std::string> modelNames = { "bottle2","plane","Sedan","car1","cup1" };
-		saveLabelMap(dpath + "labelmap.prototxt", modelNames);
-	}
-	virtual void exec/*_to_gray*/(std::string dataDir, std::string args)
-	{
-		dataDir = R"(Z:\local\data\Re3D\Re3Dag\JPEGImages\)";
-
-		std::vector<string> files;
-		ff::listFiles(dataDir, files);
-
-		for (auto &f : files)
-		{
-			auto file = dataDir + f;
-			Mat img = imread(file, IMREAD_GRAYSCALE);
-			cvtColor(img, img, CV_GRAY2BGR);
-			imwrite(file, img);
-			printf("%s\n", f.c_str());
-		}
-	}
-	virtual void exec_list(std::string dataDir, std::string args)
-	{
-		dataDir = R"(Z:\local\data\Re3D\Re3Db\)";
-
-		std::string imgDir = "JPEGImages", xmlDir = "Annotations";
-		
-		std::vector<string> files;
-		ff::listFiles(dataDir + imgDir, files);
-
-		auto saveList = [imgDir, xmlDir](const string vfiles[], int count, std::string listFile) {
-			FILE *fp = fopen(listFile.c_str(),"w");
-			if (!fp)
-				throw listFile;
-
-			for (int i = 0; i < count; ++i)
-			{
-				std::string baseName = ff::GetFileName(vfiles[i], false);
-				fprintf(fp, "%s %s\n", (imgDir + "/" + vfiles[i]).c_str(), (xmlDir + "/" + baseName + ".xml").c_str());
-			}
-
-			fclose(fp);
-		};
-
-		auto createTestNameSize = [dataDir,imgDir](const string vfiles[], int count, string dfile) {
-			FILE *fp = fopen(dfile.c_str(), "w");
-			if (!fp)
-				throw dfile;
-
-			string dir = dataDir + imgDir + "/";
-			for (int i = 0; i < count; ++i)
-			{
-				Mat img = imread(dir + vfiles[i]);
-				fprintf(fp, "%s %d %d\n", ff::GetFileName(vfiles[i],false).c_str(), img.rows, img.cols);
-			}
-			fclose(fp);
-		};
-
-		int ntest = files.size() / 5;
-		saveList(&files[0], ntest, dataDir + "test.txt");
-		createTestNameSize(&files[0], ntest, dataDir + "test_name_size.txt");
-		saveList(&files[ntest], files.size() - ntest, dataDir + "trainval.txt");
-	}
-	virtual void exec_run(std::string dataDir, std::string args)
-	{
-		srand((int)time(NULL));
-
-		dataDir = D_DATA + "/re3d/3ds-model/";
-
-		std::vector<std::string> modelNames = { "bottle2","plane","Sedan","car1","cup1"};
-		std::vector<std::string> modelFiles=modelNames;
-		for (auto &f : modelFiles)
-			f = dataDir + f + "/" + f + ".3ds";
-
-		std::vector<std::string> bgImageList = {
-			R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\list.txt)",
-			R"(F:\dataset\flickr30k_images\list.txt)"
-		};
-
-		std::vector<std::string>  bgImageFiles;
-		loadImageList(bgImageList, bgImageFiles);
-
-		std::vector<CVRModel>  models(modelFiles.size());
-		std::vector<CVRender>  renders(modelFiles.size());
-		for (size_t i = 0; i < modelFiles.size(); ++i)
-		{
-			models[i].load(modelFiles[i]);
-			renders[i] = CVRender(models[i]);
-		}
-
-		//rotation vectors
-		std::vector<Vec3f>  vdirs;
-		cvrm::sampleSphere(vdirs, 1000);
-
-		std::vector<int>  modelIndex;
-		for (int i = 0; i < (int)models.size(); ++i)
-			modelIndex.push_back(i);
-
-		Annotations annot("Re3D", "Re3D", "VOC 2007", "rendered");
-
-		std::string dpath = R"(Z:\local\data\Re3D\Re3Db\)";
-		annot.setDPath(dpath, true);
-
-		saveLabelMap(dpath + "labelmap.txt", modelNames);
-
-		int N = 20000;
-		for (int n = 0; n < N;)
-		{
-			Mat bgImg = imread(bgImageFiles[rand() % bgImageFiles.size()]);
-			if (bgImg.empty())
-				continue;
-			else
-				++n;
-
-			double scale = 800.0 / __max(bgImg.rows, bgImg.cols);
-			Size dsize(int(bgImg.cols*scale), int(bgImg.rows*scale));
-			resize(bgImg, bgImg, dsize);
-
-			std::random_shuffle(modelIndex.begin(), modelIndex.end());
-			int nModels = rand() % (int)modelIndex.size() + 1;
-
-			Mat3b dimg = bgImg.clone();
-			std::vector<DObject> objs;
-			for (int i = 0; i < nModels; ++i)
-			{
-				int mi = modelIndex[i];
-				CVRModel &modeli = models[mi];
-				CVRender &renderi = renders[mi];
-
-				Rect bb = randBox(bgImg.size(), 100, 400);
-				Size bbSize(bb.width, bb.height);
-
-				CVRMats mats(modeli, bbSize);
-				mats.mModel = cvrm::rotate(Vec3f(0, 0, 1), vdirs[rand() % vdirs.size()]);
-
-				CVRResult r = renderi.exec(mats, bbSize);
-				Mat1b mask = getRenderMask(r.depth);
-
-				bb=composite(r.img, mask, dimg, bb);
-				//cv::rectangle(dimg, bb, Scalar(0, 255, 255), 2);
-
-				DObject obj;
-				obj.objID = mi;
-				obj.name = modelNames[mi];
-				obj.boundingBox = bb;
-				objs.push_back(obj);
-			}
-
-			std::string fileBaseName = ff::StrFormat("%05d", n);
-			annot.save(fileBaseName, dimg, objs);
-
-			printf("%s\n", fileBaseName.c_str());
-
-			//imshow("img", dimg);
-			//waitKey();
-		}
-	}
-
-
-	template<typename _FilterT>
-	static void genImageList(const std::string &dir, const std::string &listFile, _FilterT isIncluded, bool recursive=true)
-	{
-		std::vector<string> files;
-		ff::listFiles(dir, files, recursive);
-		
-		std::ofstream os(listFile.c_str());
-		if (!os)
-			throw listFile;
-
-		for (auto &f : files)
-		{
-			if (isIncluded(f))
-				os << f << endl;
-		}
-	}
-
-	virtual void exec2(std::string dataDir, std::string args)
-	{
-		auto isJPG = [](const std::string &f) {
-			return f.size() >= 4 && stricmp(f.c_str() + f.size() - 4, ".jpg") == 0;
-		};
-
-		dataDir = R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\)";
-		genImageList(dataDir, dataDir + "list.txt", isJPG);
-
-		dataDir = R"(F:\dataset\flickr30k_images\)";
-		genImageList(dataDir, dataDir + "list.txt", isJPG);
-	}
-	virtual Object* clone()
-	{
-		return new RenderVOC(*this);
-	}
-};
-
-REGISTER_CLASS(RenderVOC)
+//
+//class RenderVOC
+//	:public ICommand
+//{
+//public:
+//	virtual void exec0(std::string dataDir, std::string args)
+//	{
+//		dataDir = D_DATA + "/re3d/3ds-model/";
+//
+//		std::vector<std::string> modelFiles = { "bottle2","plane","Sedan","car1","cup1"};
+//		for (auto &f : modelFiles)
+//			f = dataDir + f + "/" + f + ".3ds";
+//
+//		std::vector<std::string> bgImageList = {
+//			R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\list.txt)",
+//			R"(F:\dataset\flickr30k_images\list.txt)"
+//		};
+//
+//		std::vector<std::string>  bgImageFiles;
+//		loadImageList(bgImageList, bgImageFiles);
+//
+//		std::vector<CVRModel>  models(modelFiles.size());
+//		//std::vector<CVRender>  renders(modelFiles.size());
+//		for (size_t i = 0; i < modelFiles.size(); ++i)
+//		{
+//			models[i].load(modelFiles[i]);
+//			//renders[i] = CVRender(models[i]);
+//		}
+//
+//		std::vector<int>  modelIndex;
+//		for (int i = 0; i < (int)models.size(); ++i)
+//			modelIndex.push_back(i);
+//
+//		int N = 100;
+//		for (int n = 0; n < N;)
+//		{
+//			Mat bgImg = imread(bgImageFiles[rand() % bgImageFiles.size()]);
+//			if (bgImg.empty())
+//				continue;
+//			else
+//				++n;
+//
+//			double scale = 800.0/__max(bgImg.rows, bgImg.cols);
+//			Size dsize(int(bgImg.cols*scale), int(bgImg.rows*scale));
+//			resize(bgImg, bgImg, dsize);
+//
+//			std::random_shuffle(modelIndex.begin(), modelIndex.end());
+//			int nModels = rand() % (int)modelIndex.size()+1;
+//
+//			const float eyeZ = 4.0f;
+//			CVRMats mats(bgImg.size(), 1.5, eyeZ);
+//
+//			CVRProjector prj(mats.mView, mats.mProjection, bgImg.size());
+//
+//			CVRModelArray scene(nModels);
+//			for (int i = 0; i < nModels; ++i)
+//			{
+//				scene[i].model = models[modelIndex[i]];
+//				scene[i].mModeli = scene[i].model.getUnitize();
+//
+//				Rect bb = randBox(bgImg.size(), 100, 400);
+//
+//				Point3f C=prj.unproject(bb.x + bb.width / 2, bb.y + bb.height / 2, 0.5);
+//				Point3f L = prj.unproject(bb.x, bb.y + bb.height / 2, 0.5);
+//				Point3f R = prj.unproject(bb.x + bb.width, bb.y + bb.height / 2, 0.5);
+//				double scale = norm(L - R) / 2.0;
+//				double angle = rand() / 1000.0;
+//				scene[i].mModel = cvrm::scale(scale, scale, scale)*cvrm::rotate(angle, Vec3f(1, 0, 0))*cvrm::translate(C.x, C.y, C.z);
+//
+//				cv::rectangle(bgImg, bb, Scalar(0, 255, 255), 2);
+//			}
+//
+//
+//			CVRender render(scene);
+//			
+//			render.setBgImage(bgImg);
+//			auto r=render.exec(mats, bgImg.size());
+///*
+//			Mat curImg = bgImg.clone();
+//			for (int i = 0; i < nModels; ++i)
+//			{
+//				CVRModel &modeli = models[modelIndex[i]];
+//				CVRender &renderi = renders[modelIndex[i]];
+//
+//				CVRMats mats(modeli,bgImg.size());
+//				renderi.setBgImage(curImg);
+//				CVRResult r=renderi.exec(mats, bgImg.size());
+//				curImg = r.img;
+//			}*/
+//			imshow("img", r.img);
+//			waitKey();
+//		}
+//	}
+//
+//	virtual void exec_test_annot(std::string dataDir, std::string args)
+//	{
+//		//connectNetDrive("\\\\101.76.215.117\\f", "Z:", "fan", "fan123");
+//
+//		Annotations annot("Re3D","Re3D","VOC 2007","rendered");
+//
+//		std::vector<std::string> bgImageList = {
+//			R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\list.txt)",
+//		};
+//
+//		std::vector<std::string>  bgImageFiles;
+//		loadImageList(bgImageList, bgImageFiles);
+//
+//		std::string file = bgImageFiles.front();
+//		Mat img = imread(file);
+//
+//		DObject obj;
+//		obj.objID = 1;
+//		obj.name = "test";
+//		obj.boundingBox = Rect(2, 3, 100, 200);
+//		std::vector<DObject> objs;
+//		objs.push_back(obj);
+//		objs.push_back(obj);
+//
+//		std::string dpath = R"(Z:/local/data/Re3D/Re3Da/)";
+//		
+//		annot.setDPath(dpath);
+//
+//		//annot.saveXML("./voc.xml", file, img, objs);
+//		annot.save("001", img, objs);
+//
+//		std::vector<std::string> modelNames = { "bottle2","plane","Sedan","car1","cup1" };
+//		saveLabelMap(dpath + "labelmap.prototxt", modelNames);
+//	}
+//	virtual void exec/*_to_gray*/(std::string dataDir, std::string args)
+//	{
+//		dataDir = R"(Z:\local\data\Re3D\Re3Dag\JPEGImages\)";
+//
+//		std::vector<string> files;
+//		ff::listFiles(dataDir, files);
+//
+//		for (auto &f : files)
+//		{
+//			auto file = dataDir + f;
+//			Mat img = imread(file, IMREAD_GRAYSCALE);
+//			cvtColor(img, img, CV_GRAY2BGR);
+//			imwrite(file, img);
+//			printf("%s\n", f.c_str());
+//		}
+//	}
+//	virtual void exec_list(std::string dataDir, std::string args)
+//	{
+//		dataDir = R"(Z:\local\data\Re3D\Re3Db\)";
+//
+//		std::string imgDir = "JPEGImages", xmlDir = "Annotations";
+//		
+//		std::vector<string> files;
+//		ff::listFiles(dataDir + imgDir, files);
+//
+//		auto saveList = [imgDir, xmlDir](const string vfiles[], int count, std::string listFile) {
+//			FILE *fp = fopen(listFile.c_str(),"w");
+//			if (!fp)
+//				throw listFile;
+//
+//			for (int i = 0; i < count; ++i)
+//			{
+//				std::string baseName = ff::GetFileName(vfiles[i], false);
+//				fprintf(fp, "%s %s\n", (imgDir + "/" + vfiles[i]).c_str(), (xmlDir + "/" + baseName + ".xml").c_str());
+//			}
+//
+//			fclose(fp);
+//		};
+//
+//		auto createTestNameSize = [dataDir,imgDir](const string vfiles[], int count, string dfile) {
+//			FILE *fp = fopen(dfile.c_str(), "w");
+//			if (!fp)
+//				throw dfile;
+//
+//			string dir = dataDir + imgDir + "/";
+//			for (int i = 0; i < count; ++i)
+//			{
+//				Mat img = imread(dir + vfiles[i]);
+//				fprintf(fp, "%s %d %d\n", ff::GetFileName(vfiles[i],false).c_str(), img.rows, img.cols);
+//			}
+//			fclose(fp);
+//		};
+//
+//		int ntest = files.size() / 5;
+//		saveList(&files[0], ntest, dataDir + "test.txt");
+//		createTestNameSize(&files[0], ntest, dataDir + "test_name_size.txt");
+//		saveList(&files[ntest], files.size() - ntest, dataDir + "trainval.txt");
+//	}
+//	virtual void exec_run(std::string dataDir, std::string args)
+//	{
+//		srand((int)time(NULL));
+//
+//		dataDir = D_DATA + "/re3d/3ds-model/";
+//
+//		std::vector<std::string> modelNames = { "bottle2","plane","Sedan","car1","cup1"};
+//		std::vector<std::string> modelFiles=modelNames;
+//		for (auto &f : modelFiles)
+//			f = dataDir + f + "/" + f + ".3ds";
+//
+//		std::vector<std::string> bgImageList = {
+//			R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\list.txt)",
+//			R"(F:\dataset\flickr30k_images\list.txt)"
+//		};
+//
+//		std::vector<std::string>  bgImageFiles;
+//		loadImageList(bgImageList, bgImageFiles);
+//
+//		std::vector<CVRModel>  models(modelFiles.size());
+//		std::vector<CVRender>  renders(modelFiles.size());
+//		for (size_t i = 0; i < modelFiles.size(); ++i)
+//		{
+//			models[i].load(modelFiles[i]);
+//			renders[i] = CVRender(models[i]);
+//		}
+//
+//		//rotation vectors
+//		std::vector<Vec3f>  vdirs;
+//		cvrm::sampleSphere(vdirs, 1000);
+//
+//		std::vector<int>  modelIndex;
+//		for (int i = 0; i < (int)models.size(); ++i)
+//			modelIndex.push_back(i);
+//
+//		Annotations annot("Re3D", "Re3D", "VOC 2007", "rendered");
+//
+//		std::string dpath = R"(Z:\local\data\Re3D\Re3Db\)";
+//		annot.setDPath(dpath, true);
+//
+//		saveLabelMap(dpath + "labelmap.txt", modelNames);
+//
+//		int N = 20000;
+//		for (int n = 0; n < N;)
+//		{
+//			Mat bgImg = imread(bgImageFiles[rand() % bgImageFiles.size()]);
+//			if (bgImg.empty())
+//				continue;
+//			else
+//				++n;
+//
+//			double scale = 800.0 / __max(bgImg.rows, bgImg.cols);
+//			Size dsize(int(bgImg.cols*scale), int(bgImg.rows*scale));
+//			resize(bgImg, bgImg, dsize);
+//
+//			std::random_shuffle(modelIndex.begin(), modelIndex.end());
+//			int nModels = rand() % (int)modelIndex.size() + 1;
+//
+//			Mat3b dimg = bgImg.clone();
+//			std::vector<DObject> objs;
+//			for (int i = 0; i < nModels; ++i)
+//			{
+//				int mi = modelIndex[i];
+//				CVRModel &modeli = models[mi];
+//				CVRender &renderi = renders[mi];
+//
+//				Rect bb = randBox(bgImg.size(), 100, 400);
+//				Size bbSize(bb.width, bb.height);
+//
+//				CVRMats mats(modeli, bbSize);
+//				mats.mModel = cvrm::rotate(Vec3f(0, 0, 1), vdirs[rand() % vdirs.size()]);
+//
+//				CVRResult r = renderi.exec(mats, bbSize);
+//				Mat1b mask = getRenderMask(r.depth);
+//
+//				bb=composite(r.img, mask, dimg, bb);
+//				//cv::rectangle(dimg, bb, Scalar(0, 255, 255), 2);
+//
+//				DObject obj;
+//				obj.objID = mi;
+//				obj.name = modelNames[mi];
+//				obj.boundingBox = bb;
+//				objs.push_back(obj);
+//			}
+//
+//			std::string fileBaseName = ff::StrFormat("%05d", n);
+//			annot.save(fileBaseName, dimg, objs);
+//
+//			printf("%s\n", fileBaseName.c_str());
+//
+//			//imshow("img", dimg);
+//			//waitKey();
+//		}
+//	}
+//
+//
+//	template<typename _FilterT>
+//	static void genImageList(const std::string &dir, const std::string &listFile, _FilterT isIncluded, bool recursive=true)
+//	{
+//		std::vector<string> files;
+//		ff::listFiles(dir, files, recursive);
+//		
+//		std::ofstream os(listFile.c_str());
+//		if (!os)
+//			throw listFile;
+//
+//		for (auto &f : files)
+//		{
+//			if (isIncluded(f))
+//				os << f << endl;
+//		}
+//	}
+//
+//	virtual void exec2(std::string dataDir, std::string args)
+//	{
+//		auto isJPG = [](const std::string &f) {
+//			return f.size() >= 4 && stricmp(f.c_str() + f.size() - 4, ".jpg") == 0;
+//		};
+//
+//		dataDir = R"(F:\store\datasets\seg_dataset\ADE20K_2016_07_26\images\)";
+//		genImageList(dataDir, dataDir + "list.txt", isJPG);
+//
+//		dataDir = R"(F:\dataset\flickr30k_images\)";
+//		genImageList(dataDir, dataDir + "list.txt", isJPG);
+//	}
+//	virtual Object* clone()
+//	{
+//		return new RenderVOC(*this);
+//	}
+//};
+//
+//REGISTER_CLASS(RenderVOC)
 
 void _loadModelFiles(const std::string &listFile, std::vector<std::string> &modelNames, std::vector<std::string> &modelFiles)
 {
@@ -669,26 +669,20 @@ void _loadModelFiles(const std::string &listFile, std::vector<std::string> &mode
 	}
 }
 
-static void renderVOCImages(const std::string &listFile, const std::string &tarDataDir, int nImages, int minObjsPerImage, int maxObjsPerImage)
+static void renderVOCImages(const std::string &listFile, const std::vector<std::string> &bgImageList, const std::string &tarDataDir, int nImages, int minObjsPerImage, int maxObjsPerImage)
 {
 	srand((int)time(NULL));
 
-	//dataDir = D_DATA + "/re3d/3ds-model/";
-
+	//load model list
 	std::vector<std::string> modelNames;
 	std::vector<std::string> modelFiles;
 	_loadModelFiles(listFile, modelNames, modelFiles);
 
-	
-
-	std::vector<std::string> bgImageList = {
-		R"(/fan/store/datasets/flickr30k_images/list.txt)",
-		R"(/fan/store/datasets/seg_dataset/ADE20K_2016_07_26/images/list.txt)"
-	};
-
+	//load background image list
 	std::vector<std::string>  bgImageFiles;
 	loadImageList(bgImageList, bgImageFiles);
 
+	//load 3D models
 	std::vector<CVRModel>  models(modelFiles.size());
 	std::vector<CVRender>  renders(modelFiles.size());
 	for (size_t i = 0; i < modelFiles.size(); ++i)
@@ -698,10 +692,11 @@ static void renderVOCImages(const std::string &listFile, const std::string &tarD
 		renders[i] = CVRender(models[i]);
 	}
 
-	//rotation vectors
+	//uniform sampling the sphere directions
 	std::vector<Vec3f>  vdirs;
 	cvrm::sampleSphere(vdirs, 1000);
 
+	//gen index list of models
 	std::vector<int>  modelIndex;
 	for (int i = 0; i < (int)models.size(); ++i)
 		modelIndex.push_back(i);
@@ -713,6 +708,7 @@ static void renderVOCImages(const std::string &listFile, const std::string &tarD
 	std::string dpath = tarDataDir;
 	annot.setDPath(dpath, true);
 
+	//save label map and label list
 	saveLabelMap(dpath + "labelmap.txt", modelNames);
 
 	{
@@ -732,16 +728,19 @@ static void renderVOCImages(const std::string &listFile, const std::string &tarD
 		else
 			++n;
 
+		//scale background image to a standard size
 		double scale = 800.0 / __max(bgImg.rows, bgImg.cols);
 		Size dsize(int(bgImg.cols*scale), int(bgImg.rows*scale));
 		resize(bgImg, bgImg, dsize);
 
+		//random select models
 		std::random_shuffle(modelIndex.begin(), modelIndex.end());
 		int nModels = rand() % (maxObjsPerImage-minObjsPerImage+1) + minObjsPerImage;
 
 		Mat3b dimg = bgImg.clone();
+		//mask of objects
 		Mat1i dmask(bgImg.size());
-		setMem(dmask, 0xFF);
+		setMem(dmask, 0xFF); //-1 for background pixels
 
 		std::vector<DObject> objs;
 		for (int i = 0; i < nModels; ++i)
@@ -750,24 +749,29 @@ static void renderVOCImages(const std::string &listFile, const std::string &tarD
 			CVRModel &modeli = models[mi];
 			CVRender &renderi = renders[mi];
 
+			//random gen a bounding box to place the object
 			Rect bb = randBox(bgImg.size(), 100, 400, dmask);
 			Size bbSize(bb.width, bb.height);
 
 			CVRMats mats(modeli, bbSize);
+			//set model rotation
 			mats.mModel = cvrm::rotate(Vec3f(0, 0, 1), vdirs[rand() % vdirs.size()]);
-
+			//render the model
 			CVRResult r = renderi.exec(mats, bbSize);
 			if (r.img.size() != bbSize)
 			{
 				printf("Error: render failed\n");
 				continue;
 			}
+			//get object mask from the depth map
 			Mat1b mask = getRenderMask(r.depth);
 
+			//clip the object ROI
 			Rect imgROI = rectOverlapped(bb, Rect(0, 0, dimg.cols, dimg.rows));
 			if (imgROI.width <= 0 || imgROI.height <= 0)
 				continue;
 			Rect objROI = Rect(imgROI.x - bb.x, imgROI.y - bb.y, imgROI.width, imgROI.height);
+			//merge object mask to @dmask
 			for_each_2(DWHN1r(dmask, imgROI), DN1r(mask, objROI), [mi](int &i, uchar m) {
 				if (m)
 					i = mi;
@@ -777,8 +781,8 @@ static void renderVOCImages(const std::string &listFile, const std::string &tarD
 				printf("invalid bb\n");
 			}
 
+			//composite the current object
 			bb = composite(r.img, mask, dimg, bb);
-			//cv::rectangle(dimg, bb, Scalar(0, 255, 255), 2);
 
 			DObject obj;
 			obj.objID = mi;
@@ -787,13 +791,11 @@ static void renderVOCImages(const std::string &listFile, const std::string &tarD
 			objs.push_back(obj);
 		}
 
+		//save annotation file
 		std::string fileBaseName = ff::StrFormat("%05d", n);
 		annot.save(fileBaseName, dimg, objs);
 
 		printf("%s, nm=%d\n", fileBaseName.c_str(), nModels);
-
-		//imshow("img", dimg);
-		//waitKey();
 	}
 }
 void genVOCList(std::string dataDir, int nVal)
@@ -842,13 +844,35 @@ void genVOCList(std::string dataDir, int nVal)
 
 void on_renderVOC()
 {
-	//connectNetDrive("\\\\101.76.215.159\\f", "Z:", "fan", "fan123");
-
-	std::string listFile = R"(/fan/SDUicloudCache/re3d/re3d25.txt)";
+#if 0
+	//directory for the rendered dataset
 	std::string tarDataDir = R"(/fan/local/paddle/PaddleDetection/dataset/re3d25d/)";
-	int nImages = 1000, nVal=200;
+	//list of 3D model files
+	std::string listFile = R"(/fan/SDUicloudCache/re3d/re3d25.txt)";
+	//max./min. number of objects to be rendered in an image
+	int maxObjectPerImage = 25, minObjectPerImage = 24;
+#endif
+	
+	std::string tarDataDir = R"(/fan/local/paddle/PaddleDetection/dataset/ycb21a/)";
+	std::string listFile = R"(/fan/store/datasets/BOP/ycbv_models/models_fine/list.txt)";
+	int maxObjectPerImage = 21, minObjectPerImage = 20;
 
-	renderVOCImages(listFile, tarDataDir, nImages, 24, 25);
+	//list of background images
+	//the background image is randomly selected from this list
+	std::vector<std::string> bgImageList = {
+		R"(/fan/store/datasets/flickr30k_images/list.txt)",
+		R"(/fan/store/datasets/seg_dataset/ADE20K_2016_07_26/images/list.txt)"
+	};
+
+	//number of images to render
+	int nImages = 1000;
+	//number of images for the validation set
+	int nVal = 200;
+
+
+	//render images 
+	renderVOCImages(listFile, bgImageList, tarDataDir, nImages, minObjectPerImage, maxObjectPerImage);
+	//gen VOC list files
 	genVOCList(tarDataDir, nVal);
 }
 

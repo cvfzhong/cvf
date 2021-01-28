@@ -1,9 +1,18 @@
 #pragma once
 
+#define USE_ASSIMP
+//#define USE_VCGLIB
+
+#ifdef USE_ASSIMP
 #include "assimp/scene.h"
 #include "assimp/cimport.h"
 #include "assimp/postprocess.h"
 #include"assimp/Exporter.hpp"
+#elif defined(USE_VCGLIB)
+#define  MESHLAB_SCALAR float
+#include"common/ml_mesh_type.h"
+#endif
+
 
 #ifdef _WIN32
 #define FREEGLUT_STATIC
@@ -164,11 +173,19 @@ struct _CVRModel
 {
 public:
 	std::string    sceneFile;
-	aiMatrix4x4    _sceneTransformInFile;
 	Matx44f        _sceneTransform=cvrm::I();
 
+#if defined(USE_ASSIMP)
+	aiMatrix4x4    _sceneTransformInFile;
 	aiScene *scene = nullptr;
 	aiVector3D scene_min, scene_max, scene_center;
+#endif
+
+#if defined(USE_VCGLIB)
+	Matrix44m  _sceneTransformInFile;
+	std::shared_ptr<CMeshO> scene;
+	Point3f scene_min, scene_max, scene_center;
+#endif
 
 	std::vector<TexImage> vTex;
 
@@ -185,12 +202,15 @@ public:
 	}
 	void clear()
 	{
+#if defined(USE_ASSIMP)
 		if (scene)
 		{
 			aiReleaseImport(scene);
 			scene = nullptr;
 			sceneFile = "";
 		}
+#endif
+
 		vTex.clear();
 		if (!_texMap.empty() || _sceneList!=0)
 		{
@@ -232,6 +252,8 @@ public:
 
 	const std::vector<Vec3f>& getVertices();
 
+	void  getMesh(CVRMesh &mesh, int flags);
+
 	Matx44f calcStdPose();
 
 	void  setSceneTransformation(const Matx44f &trans, bool updateSceneInfo=true);
@@ -240,26 +262,6 @@ public:
 	{
 		return _sceneTransform;
 	}
-
-	/*Matx44f getModeli()
-	{
-		if (!scene)
-			return cvrm::I();
-		else
-		{
-#if 1
-			float tmp = scene_max.x - scene_min.x;
-			tmp = __max(scene_max.y - scene_min.y, tmp);
-			tmp = __max(scene_max.z - scene_min.z, tmp);
-			tmp = 2.f / tmp;
-#else
-			auto vsize = scene_max - scene_min;
-			float tmp=2.0/vsize.Length();
-#endif
-
-			return cvrm::translate(-scene_center.x, -scene_center.y, -scene_center.z) * cvrm::scale(tmp, tmp, tmp);
-		}
-	}*/
 };
 
 void postShowImage(CVRShowModelBase *winData);

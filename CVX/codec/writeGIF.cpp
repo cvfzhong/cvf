@@ -228,7 +228,7 @@ public:
 
  int optimizeCMAP(GIFStream *stream)
 {
-	GIFData	*cur, *img;
+	GIFData	*cur=NULL, *img=NULL;
 	int	count = 0;
 
 	for (cur = stream->data; cur != NULL; cur = cur->next) {

@@ -353,6 +353,10 @@ _CVX_API void writeAsPng(const std::string &file, const Mat &img);
 
 _CVX_API Mat readFromPng(const std::string &file, int type);
 
+_CVX_API Mat  imscale(const Mat &img, double scale, int interp = cv::INTER_NEAREST);
+
+_CVX_API Mat  imscale(const Mat &img, Size dsize, int interp = cv::INTER_NEAREST);
+
 //connected component for 4-n and 8-n
 template<typename _PixT>
 inline Mat1i ccSegN4(const Mat_<_PixT> &img)
@@ -503,6 +507,15 @@ inline Point2f transH(const Point_<_T1> &pt, const _HValT *H)
 {
 	return transH(pt.x, pt.y, H);
 };
+template<typename _DPointT, typename _T1, typename _HValT>
+inline std::vector<_DPointT> transH(const std::vector<Point_<_T1>> &pt, const _HValT *H)
+{
+	std::vector<_DPointT> dp(pt.size());
+	for (size_t i = 0; i < pt.size(); ++i)
+		dp[i] = _DPointT(transH(pt[i], H));
+	return dp;
+};
+
 
 template<typename _T1, typename _T2, typename _AValT>
 inline void transA(_T1 x, _T1 y, _T2 &tx, _T2 &ty, const _AValT *A)
@@ -520,6 +533,43 @@ inline Point2f transA(const Point_<_T1> &pt, const _AValT *A)
 {
 	return transA(pt.x, pt.y, A);
 };
+template<typename _DPointT, typename _T1, typename _HValT>
+inline std::vector<_DPointT> transA(const std::vector<Point_<_T1>> &pt, const _HValT *H)
+{
+	std::vector<_DPointT> dp(pt.size());
+	for (size_t i = 0; i < pt.size(); ++i)
+		dp[i] = _DPointT(transA(pt[i], H));
+	return dp;
+};
+
+inline bool _isIn(int x, int y, const Size &sz)
+{
+	return uint(x) < uint(sz.width) && uint(y) < uint(sz.height);
+}
+template<typename _ValT>
+inline bool isIn(_ValT x, _ValT y, const Size &size)
+{
+	return _isIn(int(x), int(y), size);
+}
+template<typename _ValT>
+inline bool isIn(const Point_<_ValT> &pt, const Size &size)
+{
+	return isIn(pt.x, pt.y, size);
+}
+inline bool _isIn(int x, int y, const Rect &roi)
+{
+	return uint(x)>=uint(roi.x) && uint(y)>=uint(roi.y) && uint(x) < uint(roi.x+roi.width) && uint(y) < uint(roi.x+roi.height);
+}
+template<typename _ValT>
+inline bool isIn(_ValT x, _ValT y, const Rect &roi)
+{
+	return _isIn(int(x), int(y), roi);
+}
+template<typename _ValT>
+inline bool isIn(const Point_<_ValT> &pt, const Rect &roi)
+{
+	return isIn(pt.x, pt.y, roi);
+}
 
 //============================================================================
 //2D affine utils

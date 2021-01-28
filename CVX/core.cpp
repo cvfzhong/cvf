@@ -184,6 +184,22 @@ Mat readFromPng(const std::string &file, int type)
 	return dimg;
 }
 
+_CVX_API Mat  imscale(const Mat &img, double scale, int interp)
+{
+	Size dsize(int(img.cols*scale + 0.5), int(img.rows*scale + 0.5));
+	return imscale(img,dsize,interp);
+}
+
+_CVX_API Mat  imscale(const Mat &img, Size dsize, int interp)
+{
+	if (dsize == img.size())
+		return img.clone();
+
+	Mat dimg;
+	resize(img, dimg, dsize, 0, 0, interp);
+	return dimg;
+}
+
 #endif
 
 _CVX_END

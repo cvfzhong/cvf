@@ -149,3 +149,8 @@ _FF_END
 #define DEVimshow1(...) cv::imshow(__VA_ARGS__)
 #endif
 
+#ifndef _STATIC_BEG
+#define _STATIC_BEG namespace{
+#define _STATIC_END }
+#endif _STATIC_BEG
+

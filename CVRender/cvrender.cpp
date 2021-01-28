@@ -82,7 +82,10 @@ const std::vector<cv::Vec3f>& CVRModel::getVertices() const
 {
 	return _model->getVertices();
 }
-
+void CVRModel::getMesh(CVRMesh &mesh, int flags)
+{
+	_model->getMesh(mesh, flags);
+}
 void    CVRModel::getBoundingBox(cv::Vec3f &cMin, cv::Vec3f &cMax) const
 {
 	static_assert(sizeof(cMin) == sizeof(_model->scene_min),"incompatible type for memcpy");
@@ -340,8 +343,6 @@ public:
 	}
 	CVRResult exec(const CVRMats &mats, Size viewSize, int output, int flags, CVRender::UserDraw *userDraw, Rect outRect)
 	{
-		if(userDraw) printf("#001\n");
-
 		if (!_rendable) //return blank images
 			return CVRResult::blank(viewSize, mats);
 
@@ -363,10 +364,11 @@ public:
 		auto sceneModelView = mats.mModeli*mats.mModel*mats.mView;
 		//glMatrixMode(GL_MODELVIEW);
 		//glLoadMatrixf(mx.val);
-		if(userDraw) printf("#002\n");
+
 #if 1
-		//_model->render(flags);
+		//time_t beg = clock();
 		_rendable->render(sceneModelView, flags);
+		//printf("cvrender: time=%d\n", int(clock() - beg));
 #else
 		glBegin(GL_QUADS);
 		glColor3f(1, 1, 1);
@@ -379,7 +381,7 @@ public:
 		glVertex3f(-0.5, 0.5, 0.);
 		glEnd();
 #endif
-		if(userDraw) printf("#003\n");
+
 		if (userDraw)
 			userDraw->draw();
 
@@ -393,14 +395,12 @@ public:
 		result.outRect = outRect;
 
 		if (outRect.width <= 0 || outRect.height <= 0)
-		{
-			printf("invalid outRect\n");
 			return result;
-		}	
 
 		glReadBuffer(GL_BACK);
 		glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
+		//time_t beg = clock();
 		outRect.y = renderHeight - (outRect.y + outRect.height);
 		if (output&CVRM_IMAGE)
 		{
@@ -421,14 +421,9 @@ public:
 			flip(depth, depth, 0);
 			result.depth = depth;
 		}
+		//printf("cvrender read: time=%d\n", int(clock() - beg));
 
 		checkGLError();
-
-		if(result.img.size()!=outRect.size())
-		{
-			printf("invalid result\n");
-			return result;
-		}
 
 		return result;
 	}

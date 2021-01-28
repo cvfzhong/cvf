@@ -192,6 +192,8 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;_USRDLL;CVRENDER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalIncludeDirectories>../;$(D_INCLUDE);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -226,6 +228,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cvrender.h" />
+    <ClInclude Include="_cvmodel_assimp.h" />
+    <ClInclude Include="_cvmodel_vcglib.h" />
     <ClInclude Include="_cvrender.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
