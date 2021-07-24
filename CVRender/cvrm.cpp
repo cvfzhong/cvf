@@ -93,8 +93,8 @@ Matx44f cvrm::perspective(float fx, float fy, float cx, float cy, Size windowSiz
 
 
 	mProjection[8] = 1 - 2.0f * cx / width;
-	mProjection[9] = 2.0f * cy / height -1.0f;
-	//mProjection[9] = 1 - 2.0f * cy / height;
+	//mProjection[9] = 2.0f * cy / height -1.0f;
+	mProjection[9] = 1 - 2.0f * cy / height;
 	mProjection[10] = -(farP + nearP) / (farP - nearP);
 	mProjection[11] = -1.0f;
 

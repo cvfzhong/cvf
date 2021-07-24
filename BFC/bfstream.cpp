@@ -233,7 +233,8 @@ void BMemoryStreamBuffer::_realloc(long size)
 }
 void BMemoryStreamBuffer::_incsize(long inc)
 {
-	this->_realloc(this->Size()+inc+m_block_size);
+	inc = __max(inc, this->Size());
+	this->_realloc(this->Size()+inc/*+m_block_size*/);
 }
 void BMemoryStreamBuffer::_write(const void* buf,size_t sz,size_t count)
 {

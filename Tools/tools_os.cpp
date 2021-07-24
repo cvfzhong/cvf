@@ -63,7 +63,7 @@ void on_list_3dmodels()
 }
 
 CMD_BEG()
-CMD("os.list-3dmodels", on_list_3dmodels, "list 3d model files", "", "")
+CMD("tools.os.list_3dmodels", on_list_3dmodels, "list 3d model files", "", "")
 CMD_END()
 
 _CMDI_END

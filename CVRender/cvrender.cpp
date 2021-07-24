@@ -131,11 +131,30 @@ CVRMats::CVRMats(Size viewSize, float fscale, float eyeDist, float zNear, float 
 
 CVRMats::CVRMats(const CVRModel &model, Size viewSize, float fscale, float eyeDist, float zNear, float zFar)
 {
+#if 0
+	auto center = model.getCenter();
+	Vec3f bbMin, bbMax;
+	model.getBoundingBox(bbMin, bbMax);
+
+	float scale = 0;
+	for (int i = 0; i < 3; ++i)
+		scale = __max(bbMax[i] - bbMin[i], scale);
+	scale = 2.f / scale;
+	eyeDist /= scale;
+
+	Vec3f bbSize = bbMax - bbMin;
+	float objSize = sqrt(bbSize.dot(bbSize));
+	
+	mModeli = cvrm::translate(-center[0], -center[1], -center[2]);
+	mModel = cvrm::I();
+	mView = cvrm::lookat(0.f, 0.f, eyeDist, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f);
+	mProjection = cvrm::perspective(viewSize.height*fscale, viewSize, __max(eyeDist-objSize,0.1f), eyeDist+objSize);
+#else
 	mModeli = model.getUnitize();
 	mModel = cvrm::I();
 	mView = cvrm::lookat(0.f, 0.f, eyeDist, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f);
 	mProjection = cvrm::perspective(viewSize.height*fscale, viewSize, zNear, zFar);
-	//mProjection = cvrm::ortho(-1, 1, -1, 1, zNear, zFar);
+#endif
 }
 
 void CVRResult::getDepthRange(float &minDepth, float &maxDepth) const

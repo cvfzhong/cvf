@@ -230,6 +230,7 @@
     <ClInclude Include="fio.h" />
     <ClInclude Include="fwd.h" />
     <ClInclude Include="log.h" />
+    <ClInclude Include="netcall.h" />
     <ClInclude Include="portable.h" />
     <ClInclude Include="src.cpp" />
     <ClInclude Include="matrix.h" />

@@ -224,13 +224,15 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="CVCalib1.cpp" />
-    <ClCompile Include="osfiles.cpp" />
-    <ClCompile Include="RenderExamples.cpp" />
+    <ClCompile Include="srcRudeSocket.cpp" />
+    <ClCompile Include="tools_bop.cpp" />
+    <ClCompile Include="tools_calib_camera.cpp" />
+    <ClCompile Include="tools_os.cpp" />
+    <ClCompile Include="examples_render.cpp" />
     <ClCompile Include="impl.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="RenderVOC.cpp" />
-    <ClCompile Include="ShowModels.cpp" />
+    <ClCompile Include="tools_voc.cpp" />
+    <ClCompile Include="tools_render.cpp" />
     <ClCompile Include="TestX.cpp" />
   </ItemGroup>
   <ItemGroup>

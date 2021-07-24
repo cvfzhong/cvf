@@ -98,7 +98,7 @@ void cvrInit2(const char *args)
 	if (!inited)
 	{
 		int argc = 1;
-		char *argv[] = {""};
+		char *argv[] = {(char*)""};
 
 		glutInit(&argc, argv);
 		inited = true;

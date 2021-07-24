@@ -842,7 +842,7 @@ void genVOCList(std::string dataDir, int nVal)
 }
 
 
-void on_renderVOC()
+void render_3d_models_as_VOC_dataset()
 {
 #if 0
 	//directory for the rendered dataset
@@ -877,7 +877,7 @@ void on_renderVOC()
 }
 
 CMD_BEG()
-CMD("renderVOC", on_renderVOC, "render VOC dataset", "", "")
+CMD0("tools.voc.render_3d_models_as_detection_dataset", render_3d_models_as_VOC_dataset)
 CMD_END()
 
 _CMDI_END

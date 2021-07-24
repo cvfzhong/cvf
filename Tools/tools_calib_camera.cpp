@@ -15,6 +15,7 @@ using namespace cv;
 using namespace std;
 
 #include"EDK/cmds.h"
+#include"appstd.h"
 
 _CMDI_BEG
 
@@ -572,27 +573,17 @@ int calib1(int argc, char** argv)
 	return 0;
 }
 
-
-
-
-class CVCalib1
-	:public ICommand
+void cv_calib_camera()
 {
-public:
-	virtual void exec(std::string dataDir, std::string args)
-	{
-		//calibration - w = 4 - h = 5 - s = 0.025 - o = camera.yml - op - oe
-		char *argv[] = {"", "-w=11", "-h=8","-s=0.025", "-o=camera.yml","-op","-oe" };
+	//calibration - w = 4 - h = 5 - s = 0.025 - o = camera.yml - op - oe
+	char *argv[] = { "", "-w=11", "-h=8","-s=0.025", "-o=camera.yml","-op","-oe" };
 
-		calib1(sizeof(argv) / sizeof(argv[0]), argv);
-	}
-	virtual Object* clone()
-	{
-		return new CVCalib1(*this);
-	}
-};
+	calib1(sizeof(argv) / sizeof(argv[0]), argv);
+}
 
-REGISTER_CLASS(CVCalib1)
+CMD_BEG()
+CMD0("tools.calib_camera", cv_calib_camera)
+CMD_END()
 
 _CMDI_END
 
