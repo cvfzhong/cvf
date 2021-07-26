@@ -17,12 +17,12 @@ int main()
 	//exec("tools.render.show_model_file");
 	//exec("tools.render.show_models_drag_drop");
 	//exec("tools.render.render_model_as_video");
-
+	 
 	//exec("tools.voc.render_3d_models_as_detection_dataset");
 
 	//exec("tools.bop.gen_views_dataset");
 	//exec("tools.bop.show_bop_gt");
-	exec("tools.bop.show_bop_scene");
+	exec("tools.bop.show_bop_");
 
 	//exec("test.net_call");
 	
