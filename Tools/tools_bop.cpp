@@ -387,6 +387,7 @@ CMD0("tools.bop.gen_views_dataset", gen_views_dataset)
 CMD_END()
 
 
+//render objects one by one and composite with the input image, so occlusions between objects may be incorrect
 void show_bop_gt()
 {
 	//std::string setName = "tless";
@@ -488,7 +489,7 @@ CMD0("tools.bop.show_bop_gt", show_bop_gt)
 CMD_END()
 
 
-
+//render all objects in an image as a scene, in order to handle inter-occlusions between objects.
 void show_bop_scene()
 {
 	//std::string setName = "tless";
@@ -501,7 +502,6 @@ void show_bop_scene()
 	for (; ff::pathExist(modelDir + ff::StrFormat("obj_%06d.ply", nobjs + 1)); ++nobjs);
 
 	std::vector<CVRModel>  models(nobjs + 1);
-	std::vector<CVRender>  renders(models.size());
 
 	std::vector<std::string> subDirs;
 	ff::listSubDirectories(dataDir, subDirs);
@@ -560,7 +560,6 @@ void show_bop_scene()
 				{
 					std::string modelFile = modelDir + ff::StrFormat("obj_%06d.ply", obj_id);
 					models[obj_id] = CVRModel(modelFile);
-					renders[obj_id] = CVRender(models[obj_id]);
 				}
 
 				scene[n++] = CVRModelEx(models[obj_id], cvrm::I(), cvrm::fromR33T(R, t));
