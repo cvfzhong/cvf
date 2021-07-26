@@ -21,8 +21,10 @@ int main()
 	//exec("tools.voc.render_3d_models_as_detection_dataset");
 
 	//exec("tools.bop.gen_views_dataset");
+	//exec("tools.bop.show_bop_gt");
+	exec("tools.bop.show_bop_scene");
 
-	exec("test.net_call");
+	//exec("test.net_call");
 	
 	return 0;
 }

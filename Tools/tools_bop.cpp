@@ -387,6 +387,205 @@ CMD0("tools.bop.gen_views_dataset", gen_views_dataset)
 CMD_END()
 
 
+void show_bop_gt()
+{
+	//std::string setName = "tless";
+	std::string setName = "ycbv";
+
+	std::string dataDir = R"(f:/store/datasets/BOP/)"+setName+"_test_bop19/test/";
+	std::string modelDir = R"(F:\store\datasets\BOP\)"+setName+"_models/models/";
+
+	int nobjs = 0;
+	for (; ff::pathExist(modelDir + ff::StrFormat("obj_%06d.ply", nobjs + 1)); ++nobjs);
+
+	std::vector<CVRModel>  models(nobjs + 1);
+	std::vector<CVRender>  renders(models.size());
+
+	std::vector<std::string> subDirs;
+	ff::listSubDirectories(dataDir, subDirs);
+
+	for (auto &subDir : subDirs)
+	{
+		if (subDir != "000059\\")
+			continue;
+
+		std::string subRoot = dataDir + "/" + subDir + "/";
+		std::string imgDir = subRoot + "rgb/";
+
+		std::vector<std::string> files;
+		ff::listFiles(imgDir, files);
+
+		nlohmann::json  jf, jcam;
+		{
+			std::string jsonFile = dataDir + subDir + "/scene_gt.json";
+			std::ifstream is(jsonFile);
+			is >> jf;
+		}
+		{
+			std::string jsonFile = dataDir + subDir + "/scene_camera.json";
+			std::ifstream is(jsonFile);
+			is >> jcam;
+		}
+
+		for (auto &f : files)
+		{
+			printf("for scene %s file %s       \r", subDir.c_str(), f.c_str());
+			auto fname = ff::GetFileName(f, false);
+			int fid = atoi(fname.c_str());
+			char buf[32];
+			const char *name = itoa(fid, buf, 10);
+			auto jx = jf[name];
+
+			Matx33f K;
+			get_vector<float>(jcam[name]["cam_K"], K.val);
+
+			cv::Mat dimg = imread(imgDir + f);
+			
+			
+			for (auto &x : jx)
+			{
+				auto obj_id = x["obj_id"].get<int>();
+
+				Matx33f R;
+				Vec3f t;
+				get_vector<float>(x["cam_R_m2c"], R.val);
+				get_vector<float>(x["cam_t_m2c"], &t);
+
+				if (models[obj_id].empty())
+				{
+					std::string modelFile = modelDir + ff::StrFormat("obj_%06d.ply", obj_id);
+					models[obj_id] = CVRModel(modelFile);
+					renders[obj_id] = CVRender(models[obj_id]);
+				}
+
+				CVRMats mats;
+				mats.mProjection = cvrm::fromK(K, dimg.size(), 1, 2000);
+				mats.mModel = cvrm::fromR33T(R, t);
+
+				auto rr = renders[obj_id].exec(mats, dimg.size());
+				Mat mask = getRenderMask(rr.depth);
+				//Rect roi = cv::get_mask_roi(DWHS(mask), 127);
+
+				for_each_3(DWHNC(dimg), DNC(rr.img), DN1(Mat1b(mask)), [](uchar *a, const uchar *b, uchar m) {
+					if (m)
+						for (int i = 0; i < 3; ++i)
+							a[i] = (a[i] + b[i]) / 2;
+				});
+
+				std::vector<std::vector<cv::Point>> contours;
+				cv::findContours(mask, contours, RETR_LIST, CHAIN_APPROX_SIMPLE);
+				cv::drawContours(dimg, contours, -1, Scalar(0, 255, 255), 2);
+			}
+			imshow("gt", dimg);
+			if (cv::waitKey() == 'q')
+				return;
+		}
+	}
+}
+
+CMD_BEG()
+CMD0("tools.bop.show_bop_gt", show_bop_gt)
+CMD_END()
+
+
+
+void show_bop_scene()
+{
+	//std::string setName = "tless";
+	std::string setName = "ycbv";
+
+	std::string dataDir = R"(f:/store/datasets/BOP/)" + setName + "_test_bop19/test/";
+	std::string modelDir = R"(F:\store\datasets\BOP\)" + setName + "_models/models/";
+
+	int nobjs = 0;
+	for (; ff::pathExist(modelDir + ff::StrFormat("obj_%06d.ply", nobjs + 1)); ++nobjs);
+
+	std::vector<CVRModel>  models(nobjs + 1);
+	std::vector<CVRender>  renders(models.size());
+
+	std::vector<std::string> subDirs;
+	ff::listSubDirectories(dataDir, subDirs);
+
+	for (auto &subDir : subDirs)
+	{
+	//	if (subDir != "000059\\")
+	//		continue;
+
+		std::string subRoot = dataDir + "/" + subDir + "/";
+		std::string imgDir = subRoot + "rgb/";
+
+		std::vector<std::string> files;
+		ff::listFiles(imgDir, files);
+
+		nlohmann::json  jf, jcam;
+		{
+			std::string jsonFile = dataDir + subDir + "/scene_gt.json";
+			std::ifstream is(jsonFile);
+			is >> jf;
+		}
+		{
+			std::string jsonFile = dataDir + subDir + "/scene_camera.json";
+			std::ifstream is(jsonFile);
+			is >> jcam;
+		}
+
+		for (auto &f : files)
+		{
+			printf("for scene %s file %s       \r", subDir.c_str(), f.c_str());
+			auto fname = ff::GetFileName(f, false);
+			int fid = atoi(fname.c_str());
+			char buf[32];
+			const char *name = itoa(fid, buf, 10);
+			auto jx = jf[name];
+
+			Matx33f K;
+			get_vector<float>(jcam[name]["cam_K"], K.val);
+
+			cv::Mat dimg = imread(imgDir + f);
+
+			int nobjs = jx.size();
+			CVRModelArray scene(nobjs);
+			int n = 0;
+
+			for (auto &x : jx)
+			{
+				auto obj_id = x["obj_id"].get<int>();
+
+				Matx33f R;
+				Vec3f t;
+				get_vector<float>(x["cam_R_m2c"], R.val);
+				get_vector<float>(x["cam_t_m2c"], &t);
+
+				if (models[obj_id].empty())
+				{
+					std::string modelFile = modelDir + ff::StrFormat("obj_%06d.ply", obj_id);
+					models[obj_id] = CVRModel(modelFile);
+					renders[obj_id] = CVRender(models[obj_id]);
+				}
+
+				scene[n++] = CVRModelEx(models[obj_id], cvrm::I(), cvrm::fromR33T(R, t));
+			}
+
+			CVRender render(scene);
+			CVRMats mats;
+			mats.mProjection = cvrm::fromK(K, dimg.size(), 1, 2000);
+
+			auto rr=render.exec(mats, dimg.size());
+
+			imshow("img", dimg);
+			imshow("scene", rr.img);
+			if (cv::waitKey() == 'q')
+				return;
+		}
+	}
+}
+
+CMD_BEG()
+CMD0("tools.bop.show_bop_scene", show_bop_scene)
+CMD_END()
+
+
 
 _CMDI_END
+
 
