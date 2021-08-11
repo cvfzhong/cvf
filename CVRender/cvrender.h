@@ -523,6 +523,12 @@ public:
 
 	CVRResult exec(CVRMats &mats, Size viewSize, int output=CVRM_IMAGE|CVRM_DEPTH, int flags=CVRM_DEFAULT, UserDraw *userDraw=NULL, cv::Rect outRect=cv::Rect(0,0,0,0));
 
+	//for python call
+	CVRResult __exec(CVRMats &mats, Size viewSize, int output = CVRM_IMAGE | CVRM_DEPTH, int flags = CVRM_DEFAULT, cv::Rect outRect = cv::Rect(0, 0, 0, 0))
+	{
+		return this->exec(mats, viewSize, output, flags, (UserDraw*)NULL, outRect);
+	}
+
 	//facilitate user draw with lambda functions
 	template<typename _UserDrawOpT>
 	CVRResult exec(CVRMats &mats, Size viewSize, _UserDrawOpT &op, int output = CVRM_IMAGE | CVRM_DEPTH, int flags = CVRM_DEFAULT, cv::Rect outRect = cv::Rect(0, 0, 0, 0))

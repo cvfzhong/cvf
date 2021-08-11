@@ -9,6 +9,9 @@
     <ClCompile>
       <AdditionalIncludeDirectories>F:\dev\prj-ex1\meshlab-2020.07\src;../;$(D_INCLUDE);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>F:\sdk\Mali_OpenGL_ES;$(D_LIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup />
 </Project>

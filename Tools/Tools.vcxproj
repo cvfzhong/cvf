@@ -231,6 +231,7 @@
     <ClCompile Include="examples_render.cpp" />
     <ClCompile Include="impl.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="tools_rbot.cpp" />
     <ClCompile Include="tools_voc.cpp" />
     <ClCompile Include="tools_render.cpp" />
     <ClCompile Include="TestX.cpp" />
