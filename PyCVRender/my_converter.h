@@ -67,15 +67,15 @@ namespace pybind11 {
 			PYBIND11_TYPE_CASTER(_Matx, _("numpy.ndarray"));
 
 			bool load(handle src, bool) {
-				Mat t;
+				cv::Mat t;
 				if (!NDArrayConverter::toMat(src.ptr(), t))
 					return false;
 				CV_Assert(t.rows == m && t.cols == n);
 				value = _Matx(t);
 				return true;
 			}
-			static handle cast(const _Matx &m, return_value_policy, handle defval) {
-				return handle(NDArrayConverter::toNDArray(cv::Mat(m)));
+			static handle cast(const _Matx &v, return_value_policy, handle defval) {
+				return handle(NDArrayConverter::toNDArray(cv::Mat(v)));
 			}
 		};
 

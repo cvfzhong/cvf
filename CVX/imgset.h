@@ -2,7 +2,7 @@
 #pragma once
 
 #include"def.h"
-#include"cvx/core.h"
+#include"CVX/core.h"
 #include"BFC/argv.h"
 
 _CVX_BEG
